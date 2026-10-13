@@ -45,6 +45,8 @@
   and new photos never reuse an id in use. What was repaired is written to the log.
 - A photo whose Defringe amount was stored far past the sliders' 20 (in a damaged catalog or sidecar) no longer
   crashes LightCraft each time it renders: the amount acts as 20.
+- Importing a preset zip that unpacks to far more than any preset (a "zip bomb") is refused with a message naming
+  the file, instead of asking for gigabytes of memory, which could end LightCraft.
 - When the graphics driver resets the GPU while LightCraft is exporting or rendering (issue #1337, seen on Windows
   with NVIDIA), LightCraft still stops, because its window can't keep drawing on the lost device, but it now says
   "LightCraft stopped unexpectedly" and why, instead of "could not open its window", and the next start renders
