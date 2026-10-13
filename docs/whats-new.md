@@ -11,6 +11,11 @@
 - A Lightroom Classic catalog whose changes are all still in its `.lrcat-wal` file (a new catalog Lightroom has
   open and hasn't written back yet) imports instead of failing with "unsupported SQLite schema format".
 
+### Local folders
+- Photos deleted (or moved) by another app no longer stay in a Local folder, failing to load and logging an error
+  each time you look (issue #1392): browsing the folder again leaves them out. A photo you had rated, flagged or
+  edited stays, marked missing, so its changes aren't lost; photos in My Photos are unchanged.
+
 ### Reliability
 - A raw file whose black level is stored as "not a number" (or infinity), or a floating-point DNG with such
   samples, no longer crashes LightCraft at 1:1 or on export: the bad values read as black.
