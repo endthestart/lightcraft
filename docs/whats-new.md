@@ -15,6 +15,9 @@
   `develop.curve` are kept in order, and a sidecar curve with a "NaN" or "inf" point is ignored.
 - Exporting a photo more than 65,535 times as long as it is wide (a one-pixel strip), or opening the Export dialog's
   watermark preview for it, no longer crashes LightCraft; the export is capped at the encoders' 65,535 pixels.
+- An export enlarged far past the photo's size (20000 typed for 2000 with Don't Enlarge off) no longer ends
+  LightCraft: an enlargement stops at 512 megapixels, as in Lightroom, and one that needs more memory than the
+  computer has is refused with the size it would take, before it starts.
 
 ## 2026-10-11
 
