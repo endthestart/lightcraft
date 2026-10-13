@@ -13,6 +13,8 @@
 - Dragging a Tone Curve point that sits very close to its neighbours (two clicks side by side, or a curve from a
   sidecar, a preset or an agent) no longer crashes LightCraft; the point stays between them. Curve points sent to
   `develop.curve` are kept in order, and a sidecar curve with a "NaN" or "inf" point is ignored.
+- Exporting a photo more than 65,535 times as long as it is wide (a one-pixel strip), or opening the Export dialog's
+  watermark preview for it, no longer crashes LightCraft; the export is capped at the encoders' 65,535 pixels.
 
 ## 2026-10-11
 

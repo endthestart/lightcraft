@@ -128,8 +128,9 @@ impl Resize {
             ResizeMode::Percent => v / 100.0,
         };
         let k = if self.dont_enlarge { k.min(1.0) } else { k };
-        // at least one pixel, at most the encoders' 65535 limit
-        k.clamp(1.0 / short, 65_535.0 / long)
+        // at least one pixel, at most the encoders' 65535 limit; the limit wins for a photo more
+        // than 65535 times as long as it is short (where `clamp` would panic: min above max)
+        k.max(1.0 / short).min(65_535.0 / long)
     }
 
     /// Output size for a `w × h` (cropped, full-resolution) photo.
@@ -2694,6 +2695,33 @@ mod tests {
         // never larger than the encoders' limit, never empty
         assert_eq!(size(json!({"percent": 10000, "dontEnlarge": false}), 6000.0, 4000.0), Some((65535, 43690)));
         assert_eq!(size(json!({"width": 1}), 6000.0, 40.0).map(|s| s.1), Some(1));
+    }
+
+    /// A photo more than 65535 times as long as it is short (a 70000 × 1 strip) made `scale`
+    /// clamp with its lower bound above its upper one, which panics, in the export and in the
+    /// Export dialog's preview on the UI thread. The encoders' limit wins, the short edge keeps a
+    /// pixel.
+    #[test]
+    fn resize_survives_photos_too_long_for_the_encoders() {
+        let modes = [
+            json!({"longEdge": 2000}),
+            json!({"shortEdge": 1}),
+            json!({"width": 500, "height": 500}),
+            json!({"megapixels": 1}),
+            json!({"percent": 50}),
+            json!({"percent": 1000, "dontEnlarge": false}),
+        ];
+        for p in modes {
+            for (w, h) in [(70_000.0, 1.0), (1.0, 70_000.0), (1e9, 3.0), (65_536.0, 1.0)] {
+                let r = ExportOptions::from_json(&p).resize.unwrap();
+                let (ow, oh) = r.apply(w, h);
+                assert!((1..=65_535).contains(&ow) && (1..=65_535).contains(&oh), "{p} on {w}×{h}: {ow}×{oh}");
+                assert!(r.scale(w, h).is_finite());
+            }
+        }
+        // (a short edge under a pixel would be scaled up to one, which the limit then caps)
+        assert_eq!(Resize::long_edge(2000).apply(70_000.0, 1.0), (65_535, 1));
+        assert_eq!(Resize::long_edge(2000).apply(1.0, 70_000.0), (1, 65_535));
     }
 
     /// A flat field of a saturated green inside Display P3 but outside sRGB, rendered into `space`.
