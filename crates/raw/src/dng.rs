@@ -240,12 +240,14 @@ pub(crate) fn decode_as(bytes: &[u8], mode: Mode, format: RawFormat) -> Result<R
         [r, c] if (1..=16).contains(r) && (1..=16).contains(c) => (*r as usize, *c as usize),
         _ => (1, 1),
     };
-    let mut values: Vec<f32> = raw.f64s(t::BLACK_LEVEL).unwrap_or_default().into_iter().map(|v| v as f32).collect();
+    // (a FLOAT / DOUBLE tag can hold NaN or infinity: such a level reads as 0, in its place)
+    let level = |v: f64| Some(v as f32).filter(|v| v.is_finite()).unwrap_or(0.0);
+    let mut values: Vec<f32> = raw.f64s(t::BLACK_LEVEL).unwrap_or_default().into_iter().map(level).collect();
     if values.len() != br * bc * cpp {
         values = vec![values.first().copied().unwrap_or(0.0)];
     }
     let (br, bc) = if values.len() == 1 { (1, 1) } else { (br, bc) };
-    let floats = |tag| raw.f64s(tag).unwrap_or_default().into_iter().map(|v| v as f32).collect::<Vec<f32>>();
+    let floats = |tag| raw.f64s(tag).unwrap_or_default().into_iter().map(level).collect::<Vec<f32>>();
     let black =
         BlackLevel { repeat_rows: br, repeat_cols: bc, values, delta_h: floats(t::BLACK_LEVEL_DELTA_H), delta_v: floats(t::BLACK_LEVEL_DELTA_V) };
 

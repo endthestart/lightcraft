@@ -7,6 +7,10 @@
   carries Huffman tables made for its own picture instead of the standard example tables. Every viewer opens them
   as before.
 
+### Reliability
+- A raw file whose black level is stored as "not a number" (or infinity), or a floating-point DNG with such
+  samples, no longer crashes LightCraft at 1:1 or on export: the bad values read as black.
+
 ## 2026-10-11
 
 ### JPEG XL export
