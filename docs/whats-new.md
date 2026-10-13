@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-13
+
+### Smaller JPEG exports
+- JPEG exports are 12–14 % smaller at the same quality, with exactly the same pixels (issue #1373): each file now
+  carries Huffman tables made for its own picture instead of the standard example tables. Every viewer opens them
+  as before.
+
 ## 2026-10-11
 
 ### JPEG XL export
