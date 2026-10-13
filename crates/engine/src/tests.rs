@@ -402,6 +402,26 @@ fn paste_selected_settings_pastes_only_chosen_copied_groups() {
     assert_eq!(s.develop_of(ids[1]).unwrap().color.vibrance, 30.0);
 }
 
+/// `mask.move` with a delta near `i64::MAX` overflowed `index + delta` (a panic wherever overflow
+/// checks are on); extreme deltas and indices now move the mask to the bottom or the top.
+#[test]
+fn mask_move_with_extreme_deltas() {
+    let mut s = demo();
+    for kind in ["linear", "radial", "brush"] {
+        s.execute("mask.add", &json!({"kind": kind})).unwrap();
+    }
+    let ids = |s: &Session| active_dev(s).masks.iter().map(|m| m.id).collect::<Vec<_>>();
+    let [a, b, c] = ids(&s)[..] else { panic!("{:?}", ids(&s)) };
+    s.execute("mask.move", &json!({"id": b, "delta": i64::MAX})).unwrap();
+    assert_eq!(ids(&s), [a, c, b], "to the bottom");
+    s.execute("mask.move", &json!({"id": b, "delta": i64::MIN})).unwrap();
+    assert_eq!(ids(&s), [b, a, c], "to the top");
+    s.execute("mask.move", &json!({"id": c, "to": i64::MIN})).unwrap();
+    assert_eq!(ids(&s), [c, b, a]);
+    s.execute("mask.move", &json!({"id": c, "to": i64::MAX})).unwrap();
+    assert_eq!(ids(&s), [b, a, c]);
+}
+
 #[test]
 fn masks_reorder_and_duplicate_and_invert() {
     let mut s = demo();

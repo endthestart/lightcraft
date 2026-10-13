@@ -639,7 +639,8 @@ pub fn specs() -> Vec<CommandSpec> {
             let i = find(&mut masks, mid, "mask.move")?;
             let to = match (p.get("to").and_then(Value::as_i64), p.get("delta").and_then(Value::as_i64)) {
                 (Some(t), _) => t,
-                (None, Some(d)) => i as i64 + d,
+                // (an agent's delta can be anything: saturate rather than overflow)
+                (None, Some(d)) => (i as i64).saturating_add(d),
                 (None, None) => return Err(bad("mask.move", "give `to` (index) or `delta`")),
             }
             .clamp(0, masks.len() as i64 - 1) as usize;
