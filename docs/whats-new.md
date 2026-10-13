@@ -22,6 +22,8 @@
 - An export enlarged far past the photo's size (20000 typed for 2000 with Don't Enlarge off) no longer ends
   LightCraft: an enlargement stops at 512 megapixels, as in Lightroom, and one that needs more memory than the
   computer has is refused with the size it would take, before it starts.
+- A crop a hair wide (or of no size), set by an agent or read from a sidecar, no longer crashes or hangs the
+  render with Clarity, Dehaze, Texture or Highlights / Shadows on: their blurs are held to the picture's size.
 
 ## 2026-10-11
 

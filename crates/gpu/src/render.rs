@@ -236,10 +236,9 @@ const CHUNK: usize = 16;
 /// Gaussian blur of a `w × h` image of `nc` interleaved channels: three box passes each way
 /// (`lightcraft_raster::blur::gaussian`).
 pub(crate) fn gaussian(cx: &mut Cx<'_>, src: &Buf, w: usize, h: usize, nc: usize, sigma: f32) -> Buf {
-    if sigma <= 0.3 || w * h == 0 {
+    let Some(radii) = lightcraft_raster::blur::radii_for(sigma, w, h) else {
         return cx.copy(src);
-    }
-    let radii = lightcraft_raster::blur::box_radii(sigma);
+    };
     let passes: Vec<(&str, usize)> = radii.iter().map(|r| ("box_h", *r)).chain(radii.iter().map(|r| ("box_v", *r))).filter(|p| p.1 > 0).collect();
     if passes.is_empty() {
         return cx.copy(src);
