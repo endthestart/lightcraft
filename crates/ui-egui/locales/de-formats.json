@@ -249,5 +249,7 @@
   "{n} originals opened in the other editor": "{n} Originale im anderen Editor geöffnet",
   "· {in_source} identical copies": "· {in_source} identische Kopien",
   "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "{what}-Zusammenfügung mit {mp} hinzugefügt: die volle Größe, {full}, braucht mehr Arbeitsspeicher, als dieser Computer hat",
-  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "{what}-Zusammenfügung mit {mp} hinzugefügt, der größten möglichen Panoramagröße (volle Größe: {full})"
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "{what}-Zusammenfügung mit {mp} hinzugefügt, der größten möglichen Panoramagröße (volle Größe: {full})",
+  "LightCraft stopped unexpectedly: {e}\n\nThe log file has the details: {path}": "LightCraft wurde unerwartet beendet: {e}\n\nEinzelheiten stehen in der Protokolldatei: {path}",
+  "LightCraft stopped unexpectedly: {e}": "LightCraft wurde unerwartet beendet: {e}"
 }

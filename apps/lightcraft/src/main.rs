@@ -162,6 +162,46 @@ fn gpu_crash_notice(what: &str) -> String {
     )
 }
 
+/// Written when the window stopped drawing after the GPU device was lost (issue #1337): the next
+/// launch renders on the CPU and says why.
+fn gpu_lost_marker_path() -> Option<std::path::PathBuf> {
+    gpu_marker_path().map(|p| p.with_file_name("gpu-lost.marker"))
+}
+
+/// Why the GPU was lost, when the GPU pipeline stopped after a device failure in this process (a
+/// driver reset, a hang, the Windows watchdog): `None` for other reasons it is off, or when it
+/// never failed.
+fn gpu_lost_reason() -> Option<String> {
+    lightcraft_engine::gpu::unavailable_reason().and_then(|r| r.strip_prefix("stopped after a GPU failure: ").map(str::to_string))
+}
+
+/// Record that LightCraft stopped after the GPU was lost, for the next launch.
+fn record_gpu_lost(marker: Option<&std::path::Path>, reason: &str) {
+    let Some(m) = marker else { return };
+    if let Some(d) = m.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    if let Err(e) = std::fs::write(m, format!("{reason}\n")) {
+        log::warn!("could not write {}: {e}", m.display());
+    }
+}
+
+/// A GPU loss the last launch stopped on: its notice, once (the marker is removed, except by a
+/// `--memory` session, which leaves the disk as it found it).
+fn gpu_lost_check_at(marker: Option<&std::path::Path>, in_memory: bool) -> Option<String> {
+    let m = marker?;
+    let reason = std::fs::read_to_string(m).ok()?;
+    if !in_memory {
+        let _ = std::fs::remove_file(m);
+    }
+    Some(format!(
+        "LightCraft stopped last time after the graphics driver reset the GPU ({}) while photos rendered on it, so GPU rendering \
+         is now off and photos render on the CPU. To try the GPU again, turn on Settings ▸ Performance ▸ Use the GPU for rendering; \
+         an up-to-date graphics driver may help.",
+        reason.trim()
+    ))
+}
+
 /// Where the system keeps monitor profiles, for the Choose Profile dialog to start in: the user's
 /// own profiles first (Linux: colord / DisplayCAL; macOS: ColorSync), then the system's.
 fn display_profile_dir() -> Option<std::path::PathBuf> {
@@ -799,7 +839,7 @@ fn main() -> eframe::Result {
     let library_dir = library_dir.or_else(lightcraft_engine::library::default_dir);
     // GPU compute: off if the preference says so, or if the last launch died creating the device
     // (issue #136) — before anything can create it
-    let gpu_crash = gpu_crash_check(in_memory);
+    let gpu_crash = gpu_crash_check(in_memory).or_else(|| gpu_lost_check_at(gpu_lost_marker_path().as_deref(), in_memory));
     let gpu_on = prefs.as_ref().is_none_or(|u| u.settings.gpu) && gpu_crash.is_none();
     lightcraft_engine::gpu::set_enabled(gpu_on);
     // the window's renderer: probed (Windows) and with a fallback chain, so a driver that can't
@@ -808,6 +848,9 @@ fn main() -> eframe::Result {
     let window_gpu::Chosen { renderer, wgpu_options, which: window_renderer, notice: window_notice } = window_gpu::choose(&win_files);
     win_files.arm(window_renderer);
     let win_files_app = win_files.clone();
+    // the window came up: a failure after this is LightCraft stopping, not a start that failed
+    let came_up = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let came_up_app = came_up.clone();
     let options = eframe::NativeOptions {
         renderer,
         viewport: egui::ViewportBuilder::default()
@@ -845,6 +888,7 @@ fn main() -> eframe::Result {
             Box::new(move |cc| {
                 // the window's renderer is up (eframe calls this after creating it)
                 win_files_app.started(window_renderer);
+                came_up_app.store(true, std::sync::atomic::Ordering::Relaxed);
                 let (mut session, problem) = open_session(in_memory, library_dir, seed_demo && files.is_empty());
                 // AI masks: the SAM 3 checkpoint (facebook/sam3) in <config>/models/sam3, or LIGHTCRAFT_SAM3_DIR
                 // (never required: without it, AI masks offer to download it; see docs/ai-masks.md)
@@ -906,6 +950,31 @@ fn main() -> eframe::Result {
             }),
         )
     }));
+    if came_up.load(std::sync::atomic::Ordering::Relaxed) {
+        // the window was up: a panic that escaped it now is LightCraft stopping, typically the
+        // window's renderer after the graphics driver reset the GPU (issue #1337: egui-wgpu panics
+        // on the lost device). Not a failed start: no other renderer is tried, and the message
+        // says what happened.
+        let stopped = match started {
+            Ok(r) => r,
+            Err(_) => Err(eframe::Error::AppCreation("its window stopped drawing (the renderer panicked)".into())),
+        };
+        if let Err(e) = &stopped {
+            let lost = gpu_lost_reason();
+            if let Some(reason) = &lost
+                && !in_memory
+            {
+                record_gpu_lost(gpu_lost_marker_path().as_deref(), reason);
+            }
+            // (not "app creation error: …": the app had been created)
+            let what = match e {
+                eframe::Error::AppCreation(m) => m.to_string(),
+                e => e.to_string(),
+            };
+            stopped_while_running(&stopped_text(&what, lost.as_deref()), log_file.as_deref());
+        }
+        return stopped;
+    }
     // a panic that still escaped the renderer's start (the probe and error handler should
     // prevent it): an error like any other failed start
     let started = started.unwrap_or_else(|_| Err(eframe::Error::AppCreation("the window's renderer panicked while starting".into())));
@@ -918,6 +987,34 @@ fn main() -> eframe::Result {
         startup_failed(&e.to_string(), log_file.as_deref());
     }
     started
+}
+
+/// What to tell the user when LightCraft stopped while running (`error`), and why when the GPU
+/// was lost (`lost`): GPU rendering is off from the next start.
+fn stopped_text(error: &str, lost: Option<&str>) -> String {
+    match lost {
+        Some(reason) => format!(
+            "{error}. The graphics driver reset the GPU ({reason}). LightCraft renders on the CPU from its next start; \
+             Settings ▸ Performance ▸ Use the GPU for rendering turns the GPU back on"
+        ),
+        None => error.to_string(),
+    }
+}
+
+/// LightCraft stopped while its window was up: say so in the log and in a native message box
+/// naming the log file (as [`startup_failed`] does for a start that failed).
+fn stopped_while_running(text: &str, log_file: Option<&std::path::Path>) {
+    log::error!("LightCraft stopped: {text}");
+    if std::env::var_os("LIGHTCRAFT_NO_PREFS").is_some() {
+        return; // tests and scripts: no dialog to click away
+    }
+    let (title, text) = lightcraft_ui_egui::i18n::stopped_message(text, log_file.map(|p| p.display().to_string()).as_deref());
+    let _ = rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title(title)
+        .set_description(text)
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
 }
 
 /// The window could not start (e.g. no usable graphics device): say so in the log and in a native
@@ -1119,6 +1216,37 @@ mod tests {
         assert!(!m.exists());
         assert_eq!(gpu_crash_check_at(Some(m.clone()), false), None);
         lightcraft_engine::gpu::backend::set_init_marker(None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Issue #1337: the window stopped drawing after the graphics driver reset the GPU during an
+    /// export, and the dialog said the window "could not open". The stop is recorded; the next
+    /// launch says why once and renders on the CPU (a `--memory` session leaves the record).
+    #[test]
+    fn a_gpu_lost_while_running_turns_the_gpu_off_next_time() {
+        let d = dir("gpu-lost");
+        let m = d.join("gpu-lost.marker");
+        assert_eq!(gpu_lost_check_at(Some(&m), false), None, "nothing recorded");
+        assert_eq!(gpu_lost_check_at(None, false), None, "no settings folder");
+        record_gpu_lost(Some(&m), "device lost (Unknown): Device is lost");
+        let notice = gpu_lost_check_at(Some(&m), true).unwrap();
+        assert!(
+            notice.contains("(device lost (Unknown): Device is lost)")
+                && notice.contains("GPU rendering is now off")
+                && notice.contains("Use the GPU for rendering"),
+            "{notice}"
+        );
+        assert!(m.exists(), "a --memory session leaves it");
+        assert!(gpu_lost_check_at(Some(&m), false).is_some());
+        assert!(!m.exists());
+        assert_eq!(gpu_lost_check_at(Some(&m), false), None, "said once");
+        // the message box: LightCraft stopped (not "could not open its window"), and why
+        let text = stopped_text("its window stopped drawing (the renderer panicked)", Some("device lost (Unknown): Device is lost"));
+        assert!(text.contains("reset the GPU (device lost (Unknown)") && text.contains("renders on the CPU from its next start"), "{text}");
+        assert_eq!(stopped_text("its window stopped drawing", None), "its window stopped drawing");
+        let (title, body) = lightcraft_ui_egui::i18n::stopped_message(&text, Some("/logs/lightcraft.log"));
+        assert_eq!(title, "LightCraft stopped");
+        assert!(body.starts_with("LightCraft stopped unexpectedly: its window stopped drawing") && body.ends_with("/logs/lightcraft.log"), "{body}");
         let _ = std::fs::remove_dir_all(&d);
     }
 

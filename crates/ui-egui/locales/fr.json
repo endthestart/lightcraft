@@ -1957,5 +1957,6 @@
   "Adding to Apple Photos": "Ajout à Apple Photos",
   "No graphics processor found: LightCraft renders on the CPU, which is much slower. Details in Help → System Info.": "Aucun processeur graphique trouvé : LightCraft effectue le rendu sur le processeur, ce qui est beaucoup plus lent. Détails dans Aide → Informations système.",
   "On NixOS, start it from `nix develop`.": "Sous NixOS, lancez-le depuis `nix develop`.",
-  "Files with the same content as another file in this import: only the first is imported.": "Fichiers au contenu identique à un autre fichier de cette importation : seul le premier est importé."
+  "Files with the same content as another file in this import: only the first is imported.": "Fichiers au contenu identique à un autre fichier de cette importation : seul le premier est importé.",
+  "LightCraft stopped": "LightCraft s’est arrêté"
 }

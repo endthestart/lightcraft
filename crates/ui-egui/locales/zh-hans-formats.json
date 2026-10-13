@@ -249,5 +249,7 @@
   "{n} originals opened in the other editor": "已在其他编辑器中打开 {n} 个原始文件",
   "· {in_source} identical copies": "· {in_source} 个相同副本",
   "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "已添加 {what} 合并（{mp}）：完整尺寸（{full}）所需的内存超出了这台电脑的内存",
-  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "已添加 {what} 合并（{mp}），这是全景图的最大尺寸（完整尺寸：{full}）"
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "已添加 {what} 合并（{mp}），这是全景图的最大尺寸（完整尺寸：{full}）",
+  "LightCraft stopped unexpectedly: {e}\n\nThe log file has the details: {path}": "LightCraft 意外停止：{e}\n\n详细信息见日志文件：{path}",
+  "LightCraft stopped unexpectedly: {e}": "LightCraft 意外停止：{e}"
 }

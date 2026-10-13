@@ -249,5 +249,7 @@
   "{n} originals opened in the other editor": "{n} originaux ouverts dans l’autre éditeur",
   "· {in_source} identical copies": "· {in_source} copies identiques",
   "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "Fusion de {what} ajoutée en {mp} : la taille complète, {full}, demande plus de mémoire que n’en a cet ordinateur",
-  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "Fusion de {what} ajoutée en {mp}, la plus grande taille possible pour un panorama (taille complète : {full})"
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "Fusion de {what} ajoutée en {mp}, la plus grande taille possible pour un panorama (taille complète : {full})",
+  "LightCraft stopped unexpectedly: {e}\n\nThe log file has the details: {path}": "LightCraft s’est arrêté de façon inattendue : {e}\n\nConsultez le fichier journal pour plus de détails : {path}",
+  "LightCraft stopped unexpectedly: {e}": "LightCraft s’est arrêté de façon inattendue : {e}"
 }

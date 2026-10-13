@@ -212,6 +212,17 @@ pub fn startup_failed_message(error: &str, log_file: Option<&str>) -> (String, S
     (tr("LightCraft could not start").to_string(), text)
 }
 
+/// The title and text of the message box shown when LightCraft stopped while its window was up
+/// (issue #1337: the window's renderer after the graphics driver reset the GPU), in the UI
+/// language: what happened and, when there is one, the log file to look in.
+pub fn stopped_message(error: &str, log_file: Option<&str>) -> (String, String) {
+    let text = match log_file {
+        Some(path) => tr_format!("LightCraft stopped unexpectedly: {e}\n\nThe log file has the details: {path}", e = error, path = path),
+        None => tr_format!("LightCraft stopped unexpectedly: {e}", e = error),
+    };
+    (tr("LightCraft stopped").to_string(), text)
+}
+
 pub fn builtin_label(source: &str, builtin: bool) -> &str {
     if builtin { tr(source) } else { source }
 }

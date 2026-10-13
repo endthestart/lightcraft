@@ -39,6 +39,10 @@
   held to the picture's size, and samples outside the picture read its edge.
 - A crop of no size (from an agent or a sidecar) no longer gives the Detail view a photo of no size to lay out
   (its width over its height was 0 / 0, which stopped debug builds); it shows as a single pixel's colour.
+- When the graphics driver resets the GPU while LightCraft is exporting or rendering (issue #1337, seen on Windows
+  with NVIDIA), LightCraft still stops, because its window can't keep drawing on the lost device, but it now says
+  "LightCraft stopped unexpectedly" and why, instead of "could not open its window", and the next start renders
+  on the CPU and explains how to turn the GPU back on.
 
 ### Slider drags on large raws
 - Dragging a slider no longer re-renders the edited photo's filmstrip thumbnail on every frame; it follows once you
