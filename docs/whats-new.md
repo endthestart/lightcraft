@@ -10,6 +10,9 @@
 ### Reliability
 - A raw file whose black level is stored as "not a number" (or infinity), or a floating-point DNG with such
   samples, no longer crashes LightCraft at 1:1 or on export: the bad values read as black.
+- Dragging a Tone Curve point that sits very close to its neighbours (two clicks side by side, or a curve from a
+  sidecar, a preset or an agent) no longer crashes LightCraft; the point stays between them. Curve points sent to
+  `develop.curve` are kept in order, and a sidecar curve with a "NaN" or "inf" point is ignored.
 
 ## 2026-10-11
 

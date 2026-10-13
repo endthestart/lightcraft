@@ -497,13 +497,15 @@ pub fn specs() -> Vec<CommandSpec> {
         }),
         cmd!("develop.curve", "Set Point Curve", [], None, "{channel: master|red|green|blue, points: [[x,y],...] in 0..1}", has_active, |s, p| {
             let ch = str_param(p, "channel").unwrap_or("master").to_string();
-            let pts: Vec<Point> = p
+            let mut pts: Vec<Point> = p
                 .get("points")
                 .and_then(Value::as_array)
                 .ok_or_else(|| bad("develop.curve", "missing points"))?
                 .iter()
                 .filter_map(|q| Some(Point::new(q.get(0)?.as_f64()?.clamp(0.0, 1.0), q.get(1)?.as_f64()?.clamp(0.0, 1.0))))
                 .collect();
+            // stored in the order the curve runs, as the editor draws and drags them
+            pts.sort_by(|a, b| a.x.total_cmp(&b.x));
             edit(s, "develop.curve", "Tone Curve", |d| {
                 match ch.as_str() {
                     "master" | "rgb" => d.curve.master = pts,
