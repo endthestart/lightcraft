@@ -1150,6 +1150,10 @@ type AlbumKids = std::collections::HashMap<Option<AlbumId>, Vec<Album>>;
 
 /// `open_to`: folders forced open this frame (the way down to an album that was just made).
 fn albums_tree(app: &mut LightcraftApp, ui: &mut egui::Ui, all: &AlbumKids, parent: Option<AlbumId>, indent: f32, open_to: &[AlbumId]) {
+    // 64 folders deep at most (16 points a level): a catalog that loops must not overflow the stack
+    if indent > 64.0 * 16.0 {
+        return;
+    }
     let Some(kids) = all.get(&parent) else { return };
     for a in kids {
         if a.folder {

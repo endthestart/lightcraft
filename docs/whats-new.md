@@ -39,6 +39,10 @@
   held to the picture's size, and samples outside the picture read its edge.
 - A crop of no size (from an agent or a sidecar) no longer gives the Detail view a photo of no size to lay out
   (its width over its height was 0 / 0, which stopped debug builds); it shows as a single pixel's colour.
+- A library whose catalog file was damaged (or edited by hand) in a way that still reads no longer crashes
+  LightCraft when it shows a stack, or hangs it when a folder is moved: on opening, records are put back under
+  their own ids, stacks keep only photos that exist (at least two), folders inside themselves move to the top,
+  and new photos never reuse an id in use. What was repaired is written to the log.
 - When the graphics driver resets the GPU while LightCraft is exporting or rendering (issue #1337, seen on Windows
   with NVIDIA), LightCraft still stops, because its window can't keep drawing on the lost device, but it now says
   "LightCraft stopped unexpectedly" and why, instead of "could not open its window", and the next start renders

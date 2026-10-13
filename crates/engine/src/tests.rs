@@ -1220,3 +1220,20 @@ fn hdr_edits_render_with_their_hdr_histogram() {
     assert!(r.histogram.above_sdr() > 0.0);
     assert!(r.deep.is_none(), "the preview itself stays the 8-bit SDR rendition");
 }
+
+/// Found by fuzzing catalog snapshots: an album filed under one id but naming its own folder's
+/// listed itself inside itself, and `albums.list` recursed until the stack overflowed (an abort:
+/// no guard catches it). Loading repairs such a catalog (`Catalog::repair`); one that skipped
+/// that still lists, the loop cut off.
+#[test]
+fn albums_list_survives_a_catalog_that_loops() {
+    let mut s = Session::with_demo();
+    let f = s.execute("album.create", &json!({"name": "F", "folder": true})).unwrap()["id"].as_u64().unwrap();
+    let a = s.execute("album.create", &json!({"name": "A", "parent": f})).unwrap()["id"].as_u64().unwrap();
+    let mut v: serde_json::Value = serde_json::from_str(&s.catalog.to_snapshot()).unwrap();
+    v["albums"][a.to_string()]["id"] = f.into();
+    // as read, without the repair a load does
+    s.catalog = serde_json::from_value(v).unwrap();
+    let r = s.execute("albums.list", &json!({})).unwrap();
+    assert!(r.to_string().contains("\"F\""), "{r}");
+}
