@@ -247,5 +247,7 @@
   "{n} photos opened for editing; each is stacked with its original": "{n}枚の写真を編集用に開きました。それぞれ元の写真とスタックされています",
   "{name} opened in the other editor": "{name}を別のエディタで開きました",
   "{n} originals opened in the other editor": "{n}個の元ファイルを別のエディタで開きました",
-  "· {in_source} identical copies": "・同一のコピー {in_source} 件"
+  "· {in_source} identical copies": "・同一のコピー {in_source} 件",
+  "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "{what}合成を{mp}で追加しました：フルサイズ（{full}）にはこのコンピューターのメモリが足りません",
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "{what}合成を{mp}で追加しました。パノラマの最大サイズです（フルサイズ：{full}）"
 }

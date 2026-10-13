@@ -56,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Panorama Merge",
             [],
             None,
-            "{ids?, projection=auto|spherical|cylindrical|perspective, boundaryWarp=0..100, autoCrop=false, fillEdges=false, autoSettings=true, stack=false, maxMegapixels=40, preview=false, previewPath?}",
+            "{ids?, projection=auto|spherical|cylindrical|perspective, boundaryWarp=0..100, autoCrop=false, fillEdges=false, autoSettings=true, stack=false, maxMegapixels=full size (≤ 512, held to memory), preview=false, previewPath?}",
             can_merge,
             |s, p| run(s, "merge.panorama", p)
         ),

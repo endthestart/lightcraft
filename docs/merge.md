@@ -13,7 +13,7 @@ All algorithms are our own implementations from published papers (cited in the m
   `<name>-HDR.dng`, `-Pano.dng` or `-HDR-Pano.dng`, imported and selected.
 - **Commands** (CLI, MCP, control channel):
   - `merge.hdr {ids?, align=true, deghost=none|low|medium|high, autoSettings=true, stack=false, preview=false, showOverlay=false, previewPath?}`
-  - `merge.panorama {ids?, projection=auto|spherical|cylindrical|perspective, boundaryWarp=0..100, autoCrop=false, fillEdges=false, autoSettings=true, maxMegapixels=40, preview, previewPath?}`
+  - `merge.panorama {ids?, projection=auto|spherical|cylindrical|perspective, boundaryWarp=0..100, autoCrop=false, fillEdges=false, autoSettings=true, maxMegapixels (default: the photos' own resolution), preview, previewPath?}`
   - `merge.hdrPanorama {ids?, bracket=0 (from EXIF), …both sets of options}`
 - **CLI:** `lightcraft-cli merge hdr|panorama|hdr-panorama [options] FILES…`;
   `lightcraft-cli synth-merge hdr|panorama -o DIR` writes synthetic inputs (procedural scene).
@@ -60,5 +60,14 @@ scale in `BaselineExposure`; raw sources keep their DNG colour tags (camera RGB)
   not patch synthesis.
 - *Create Stack*: the result goes on top of a collapsed stack of its sources (`Catalog::stack_with_ops`); its
   caption also lists them.
-- Panorama output is limited to `maxMegapixels` (default 40) — blending memory is ~25 bytes/pixel.
+- A panorama comes out at its photos' own resolution, at most 512 MP and 65,000 px on its long edge
+  (Lightroom's limits), unless `maxMegapixels` asks for less (issue #1455; it was 40 MP for every panorama).
+  It is held to what fits in memory: three quarters of the computer's RAM less the app's memory budget
+  (a computer whose memory can't be read, Windows, counts as 8 GB), never below 40 MP. Measured peak
+  resident sizes of synthetic stitches (20–81 MP out of 38–154 MP of photos): while the photos are projected
+  they are still held beside the tiles, 12 bytes per photo pixel plus 27–34 per output pixel; the blend that
+  follows, with the photos' pixels freed, peaks at 55–67 bytes per output pixel; the DNG takes less. The
+  limit uses 36 and 68. Five 51 MP photos can make up to 166 MP with 16 GB, 355 MP with 32 GB. The result's
+  `megapixels`, `nativeMegapixels` and `limit` (`memory`, `size` or `asked`) say when it came out smaller,
+  and the app's message says why.
 - The browser build has no file access for merges yet.

@@ -11,6 +11,13 @@
 - A Lightroom Classic catalog whose changes are all still in its `.lrcat-wal` file (a new catalog Lightroom has
   open and hasn't written back yet) imports instead of failing with "unsupported SQLite schema format".
 
+### Full-resolution panoramas
+- Panorama and HDR Panorama merges keep the resolution of their photos instead of stopping at 40 megapixels
+  (issue #1455), up to 512 MP and 65,000 pixels on the long edge, as in Lightroom. When the full size needs more
+  memory than the computer has, the panorama is made as large as fits (five 51 MP photos: up to 166 MP with
+  16 GB, 355 MP with 32 GB) and the message says so. The merge also frees each photo's pixels once they are
+  projected, so it needs less memory than before at any size (an 81 MP stitch: 4.4 GB instead of 6.2 GB).
+
 ### Local folders
 - Photos deleted (or moved) by another app no longer stay in a Local folder, failing to load and logging an error
   each time you look (issue #1392): browsing the folder again leaves them out. A photo you had rated, flagged or

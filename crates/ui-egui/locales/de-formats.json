@@ -247,5 +247,7 @@
   "{n} photos opened for editing; each is stacked with its original": "{n} Fotos zur Bearbeitung geöffnet; jedes ist mit seinem Original gestapelt",
   "{name} opened in the other editor": "{name} im anderen Editor geöffnet",
   "{n} originals opened in the other editor": "{n} Originale im anderen Editor geöffnet",
-  "· {in_source} identical copies": "· {in_source} identische Kopien"
+  "· {in_source} identical copies": "· {in_source} identische Kopien",
+  "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "{what}-Zusammenfügung mit {mp} hinzugefügt: die volle Größe, {full}, braucht mehr Arbeitsspeicher, als dieser Computer hat",
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "{what}-Zusammenfügung mit {mp} hinzugefügt, der größten möglichen Panoramagröße (volle Größe: {full})"
 }

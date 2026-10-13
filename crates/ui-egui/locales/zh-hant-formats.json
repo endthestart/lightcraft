@@ -247,5 +247,7 @@
   "{n} photos opened for editing; each is stacked with its original": "已開啟 {n} 張相片進行編輯；每張都與其原始相片堆疊在一起",
   "{name} opened in the other editor": "已在其他編輯器中開啟 {name}",
   "{n} originals opened in the other editor": "已在其他編輯器中開啟 {n} 個原始檔案",
-  "· {in_source} identical copies": "· {in_source} 個相同副本"
+  "· {in_source} identical copies": "· {in_source} 個相同副本",
+  "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "已新增{what}合併照片（{mp}）：完整尺寸（{full}）所需的記憶體超過這台電腦的記憶體",
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "已新增{what}合併照片（{mp}），這是全景圖的最大尺寸（完整尺寸：{full}）"
 }

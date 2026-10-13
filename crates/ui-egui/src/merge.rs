@@ -269,8 +269,9 @@ pub fn poll(app: &mut LightcraftApp, ctx: &egui::Context) {
                 });
                 match r.map_err(lightcraft_engine::EngineError::Other).and_then(|out| app.session.finish_merge(&t.job, out)) {
                     Ok(v) => {
+                        let message = added_message(what, &v);
                         app.merge.last_result = Some(v);
-                        app.toast(ctx, crate::i18n::tr_format!("{what} merge added", what = what));
+                        app.toast(ctx, message);
                     }
                     Err(_) if t.cancel.load(Ordering::Relaxed) => app.toast(ctx, crate::i18n::tr_format!("{what} merge cancelled", what = what)),
                     Err(e) => {
@@ -289,6 +290,27 @@ pub fn poll(app: &mut LightcraftApp, ctx: &egui::Context) {
                 ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
         }
+    }
+}
+
+/// The message for a finished merge (`what`: "Panorama", …; `info`: its result): a panorama
+/// smaller than its photos' resolution says why (issue #1455).
+fn added_message(what: &str, info: &Value) -> String {
+    let size = |k: &str| info[k].as_f64().map(|mp| format!("{mp:.0} MP"));
+    match (info["limit"].as_str(), size("megapixels"), size("nativeMegapixels")) {
+        (Some("memory"), Some(mp), Some(full)) => crate::i18n::tr_format!(
+            "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has",
+            what = what,
+            mp = mp,
+            full = full
+        ),
+        (Some("size"), Some(mp), Some(full)) => crate::i18n::tr_format!(
+            "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})",
+            what = what,
+            mp = mp,
+            full = full
+        ),
+        _ => crate::i18n::tr_format!("{what} merge added", what = what),
     }
 }
 
@@ -421,5 +443,27 @@ fn num(ui: &mut egui::Ui, spec: &lightcraft_develop::ControlSpec, v: &mut f64) -
             true
         }
         None => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #1455: a panorama held to the computer's memory, or to the largest size, says so.
+    #[test]
+    fn a_smaller_panorama_says_why() {
+        let added = |info: Value| added_message("Panorama", &info);
+        assert_eq!(
+            added(json!({"limit": "memory", "megapixels": 166.2, "nativeMegapixels": 194.0})),
+            "Panorama merge added at 166 MP: its full size, 194 MP, needs more memory than this computer has"
+        );
+        assert_eq!(
+            added(json!({"limit": "size", "megapixels": 512.0, "nativeMegapixels": 700.4})),
+            "Panorama merge added at 512 MP, the largest a panorama can be (its full size is 700 MP)"
+        );
+        assert_eq!(added(json!({"limit": null, "megapixels": 90.0, "nativeMegapixels": 90.0})), "Panorama merge added");
+        assert_eq!(added(json!({"limit": "asked", "megapixels": 20.0, "nativeMegapixels": 90.0})), "Panorama merge added");
+        assert_eq!(added_message("HDR", &json!({"ev": [0.0]})), "HDR merge added");
     }
 }

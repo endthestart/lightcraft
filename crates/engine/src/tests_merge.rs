@@ -113,7 +113,34 @@ fn panorama_command_with_auto_crop() {
     assert!(p.width > 800 && p.height > 300, "{}×{}", p.width, p.height);
     let crop = s.develop_of(id).unwrap().crop.geometry.rect;
     assert!(crop.width() < 1.0 && crop.width() * crop.height() > 0.5, "{crop:?}");
+    // the photos' own resolution, so nothing held it back (issue #1455)
+    let (mp, native) = (r["megapixels"].as_f64().unwrap(), r["nativeMegapixels"].as_f64().unwrap());
+    assert!((mp / native - 1.0).abs() < 0.02 && r["limit"].is_null(), "{r}");
+    // a size asked for says so
+    let small =
+        s.execute("merge.panorama", &json!({"ids": ids, "projection": "cylindrical", "autoSettings": false, "maxMegapixels": native / 2.0})).unwrap();
+    assert_eq!(small["limit"], "asked", "{small}");
+    assert!(small["megapixels"].as_f64().unwrap() <= native / 2.0 * 1.02, "{small}");
     // too few photos
     assert!(s.execute("merge.panorama", &json!({"ids": [ids[0]]})).is_err());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Issue #1455: a panorama keeps its photos' resolution, held to what fits in memory beside them
+/// (never below the 40 MP every panorama used to have), and never above a size asked for.
+#[test]
+fn panorama_size_is_held_to_memory() {
+    use crate::merge::{MIN_FITTED_MEGAPIXELS, fit_in_memory};
+    let full = lightcraft_merge::PanoOptions::default();
+    let gb = |g: usize| Some(g << 30);
+    let photos = 5.0 * 51e6; // five 51 MP photos
+    let mp = |o: lightcraft_merge::PanoOptions| o.max_megapixels;
+    assert_eq!(mp(fit_in_memory(&full, photos, gb(512))), lightcraft_merge::pano::MAX_MEGAPIXELS, "plenty of memory: the full size");
+    let m16 = mp(fit_in_memory(&full, photos, gb(16)));
+    assert!(m16 > MIN_FITTED_MEGAPIXELS && m16 < 512.0, "16 GB: {m16} MP");
+    assert!(mp(fit_in_memory(&full, photos, gb(32))) > m16, "more memory, more pixels");
+    assert_eq!(mp(fit_in_memory(&full, photos, gb(4))), MIN_FITTED_MEGAPIXELS, "never below 40 MP");
+    let asked = lightcraft_merge::PanoOptions { max_megapixels: 20.0, ..full.clone() };
+    assert_eq!(mp(fit_in_memory(&asked, photos, gb(16))), 20.0, "a size asked for is kept when it fits");
+    assert_eq!(fit_in_memory(&full, 1e6, None), fit_in_memory(&full, 1e6, gb(8)), "memory unknown: taken as 8 GB");
 }

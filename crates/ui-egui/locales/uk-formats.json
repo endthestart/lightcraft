@@ -247,5 +247,7 @@
   "{n} photos opened for editing; each is stacked with its original": "Відкрито для редагування фото: {n}; кожне об’єднано в стос з оригіналом",
   "{name} opened in the other editor": "{name} відкрито в іншому редакторі",
   "{n} originals opened in the other editor": "Відкрито оригіналів в іншому редакторі: {n}",
-  "· {in_source} identical copies": "· ідентичних копій: {in_source}"
+  "· {in_source} identical copies": "· ідентичних копій: {in_source}",
+  "{what} merge added at {mp}: its full size, {full}, needs more memory than this computer has": "{what}: об’єднання додано в розмірі {mp}: для повного розміру ({full}) бракує пам’яті цього комп’ютера",
+  "{what} merge added at {mp}, the largest a panorama can be (its full size is {full})": "{what}: об’єднання додано в розмірі {mp} — це найбільший розмір панорами (повний розмір: {full})"
 }
