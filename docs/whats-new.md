@@ -47,6 +47,8 @@
   crashes LightCraft each time it renders: the amount acts as 20.
 - Importing a preset zip that unpacks to far more than any preset (a "zip bomb") is refused with a message naming
   the file, instead of asking for gigabytes of memory, which could end LightCraft.
+- A demo photo whose stored size was damaged (a width of 4294967295) is rendered at its own size instead of
+  one that overflows.
 - When the graphics driver resets the GPU while LightCraft is exporting or rendering (issue #1337, seen on Windows
   with NVIDIA), LightCraft still stops, because its window can't keep drawing on the lost device, but it now says
   "LightCraft stopped unexpectedly" and why, instead of "could not open its window", and the next start renders
