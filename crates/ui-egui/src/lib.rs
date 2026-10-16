@@ -547,6 +547,10 @@ pub struct LccApp {
     /// Say once, when the GPU device has been tried, that no graphics processor was found
     /// ([`panels::notices::gpu_notice`]). The desktop app sets it; headless sessions and tests don't.
     pub gpu_notice: bool,
+    /// This host may run the start-up update check (when the user turned it on): the desktop app
+    /// with a settings folder of its own sets it. Headless sessions (the test harness, `snapshot`,
+    /// MCP), `--memory` and `<PREFIX>_NO_PREFS` runs don't, so they never check at start.
+    pub startup_update_check: bool,
     /// The window shows SDR only (desktop: eframe's surface is 8-bit, `hdr_display::report`), so
     /// the HDR button says HDR edits are seen through the SDR rendition. Headless/tests: false.
     pub hdr_display_sdr: bool,
@@ -665,6 +669,7 @@ impl LccApp {
             preview_window: None,
             gpu_applied: None,
             gpu_notice: false,
+            startup_update_check: false,
             hdr_display_sdr: false,
             hdr_headroom: None,
             memory_applied: None,

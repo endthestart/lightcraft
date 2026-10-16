@@ -1487,6 +1487,8 @@
   "Install and Relaunch": "Установить и перезапустить",
   "Skip This Version": "Пропустить эту версию",
   "Check for updates when the app starts": "Проверять обновления при запуске",
+  "Checking for updates when the app starts is still off": "Проверка обновлений при запуске по-прежнему выключена",
+  "Update settings not saved": "Настройки обновлений не сохранены",
   "Include prereleases (release candidates)": "Включать предварительные версии (RC)",
   "These settings are saved in the app's settings folder.": "Эти настройки сохраняются в папке настроек приложения.",
   "File date": "Дата файла",

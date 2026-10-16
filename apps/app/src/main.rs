@@ -1100,6 +1100,12 @@ fn main() -> eframe::Result {
                 // (never required: without it, AI masks offer to download it; see docs/ai-masks.md)
                 // and the user's own download locations, one base URL per line (<PREFIX>_SAM3_MIRRORS too)
                 session = session.with_default_sam3_model();
+                // updates: a run that keeps no settings (--memory, <PREFIX>_NO_PREFS) neither reads
+                // nor writes the settings folder's updates.json, and never checks at start
+                let keeps_settings = !in_memory && !lcc_brand::env_is_set("NO_PREFS");
+                if !keeps_settings {
+                    session.updater = lcc_engine::update::Updater::new(None);
+                }
                 // HDR display: SDR unless the surface, platform and display all allow HDR
                 let display = hdr_display::report(cc.wgpu_render_state.as_ref());
                 let mut app = LccApp::new(session, services(cc, app_log_file.as_deref()));
@@ -1114,6 +1120,8 @@ fn main() -> eframe::Result {
                 app.notices.extend(launch_notices);
                 app.notices.extend(window_notice);
                 app.gpu_notice = true;
+                // the start-up update check, when the user turned it on (off by default)
+                app.startup_update_check = keeps_settings;
                 // an empty library opens where Import is offered (a grid, with the sidebar); before
                 // the snapshot below, so this alone isn't written to the settings file
                 if problem.is_none() && files.is_empty() {

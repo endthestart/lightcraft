@@ -7,7 +7,7 @@
 //! | Platform | Artifact | What happens |
 //! |---|---|---|
 //! | Windows | `.msi` | the installer runs (`msiexec`), then the app starts again |
-//! | macOS | `.dmg` | mounted, the app copied over the running one, relaunched from a terminal |
+//! | macOS | `.dmg` | mounted, its app copied beside the running bundle, checked and swapped in, relaunched |
 //! | Linux | `.AppImage` | the running file is replaced and the new one started |
 //! | anywhere else | `.tar.gz` / `.zip` | the folder it is in is shown, to unpack it yourself |
 //!
@@ -20,6 +20,9 @@ use std::process::Command;
 use crate::download::Downloaded;
 use crate::error::UpdateError;
 use crate::target::Kind;
+
+#[cfg(target_os = "macos")]
+mod macos;
 
 /// What the caller has to do once the install has been started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,7 +81,11 @@ pub fn plan(kind: Kind, file: &Path, version: &str) -> Plan {
         },
         Kind::Dmg => Plan {
             summary: format!("Install {version} from the disk image"),
-            steps: vec!["The disk image is opened and its app copied over this one.".into(), "The app starts again when the copy is done.".into()],
+            steps: vec![
+                "The disk image is opened and its app copied next to this one, then checked.".into(),
+                "The new app takes this one's place (this one is put back if anything fails).".into(),
+                "The new version starts as soon as this one quits.".into(),
+            ],
             destination: install_dir(),
             restart: Restart::QuitAndRelaunch,
         },
@@ -125,7 +132,7 @@ pub fn install_with(
 ) -> Result<Outcome, UpdateError> {
     match kind {
         Kind::Msi => install_msi(&downloaded.path),
-        Kind::Dmg => install_dmg(&downloaded.path),
+        Kind::Dmg => install_dmg(&downloaded.path, version),
         Kind::AppImage => install_appimage(&downloaded.path),
         Kind::Archive => show(&downloaded.path).map_err(UpdateError::Install).map(|()| Outcome::manual(&downloaded.path)),
         Kind::Checksums => Err(UpdateError::Install("that file is the release's checksum list, not an update".into())),
@@ -144,16 +151,18 @@ pub fn install_with(
 
 /// The `.app` bundle this program runs from, when it is inside one.
 fn app_bundle() -> Option<PathBuf> {
-    let exe = current_exe()?;
+    bundle_of(&current_exe()?)
+}
+
+/// The `.app` bundle the executable `exe` is inside, if any.
+fn bundle_of(exe: &Path) -> Option<PathBuf> {
     exe.ancestors().find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app"))).map(Path::to_path_buf)
 }
 
-/// Where the app bundle lives (`/Applications` when it is not inside a bundle).
+/// The folder the app bundle is in. `None` outside a bundle: then there is nothing to replace,
+/// and no other folder (`/Applications` included) is ever a fallback.
 fn install_dir() -> Option<PathBuf> {
-    match app_bundle() {
-        Some(bundle) => bundle.parent().map(Path::to_path_buf),
-        None => Some(PathBuf::from("/Applications")),
-    }
+    app_bundle()?.parent().map(Path::to_path_buf)
 }
 
 fn current_exe() -> Option<PathBuf> {
@@ -162,7 +171,7 @@ fn current_exe() -> Option<PathBuf> {
 }
 
 /// `'…'` for a POSIX shell: an embedded `'` is closed, escaped and reopened.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn sh_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
 }
@@ -191,58 +200,15 @@ fn install_msi(msi: &Path) -> Result<Outcome, UpdateError> {
     Err(UpdateError::Install(format!("{} is a Windows installer; this system runs it another way", msi.display())))
 }
 
-// ---------- macOS
+// ---------- macOS (the install itself is in `install/macos.rs`)
 
 #[cfg(target_os = "macos")]
-fn install_dmg(dmg: &Path) -> Result<Outcome, UpdateError> {
-    let target = install_dir().ok_or_else(|| UpdateError::Install("could not tell where this app is installed".into()))?;
-    let app = app_bundle()
-        .and_then(|b| b.file_name().map(|n| n.to_string_lossy().to_string()))
-        .unwrap_or_else(|| format!("{}.app", lcc_brand::DISPLAY_NAME));
-    // A script in the user's cache, run in a terminal window so its output (and any error the copy
-    // hits on the way) is visible instead of lost with this process.
-    let script = std::env::temp_dir().join(format!("{}-update-{}.sh", lcc_brand::BINARY, std::process::id()));
-    let body = format!(
-        "#!/bin/sh\n\
-         # written by the app's updater: mount the disk image, copy the app over this one, start it\n\
-         set -e\n\
-         MOUNT=$(mktemp -d /tmp/{binary}-update.XXXXXX)\n\
-         cleanup() {{ hdiutil detach \"$MOUNT\" >/dev/null 2>&1 || true; rmdir \"$MOUNT\" >/dev/null 2>&1 || true; }}\n\
-         trap cleanup EXIT\n\
-         echo \"Mounting {dmg}…\"\n\
-         hdiutil attach {dmg} -nobrowse -quiet -mountpoint \"$MOUNT\"\n\
-         SRC=$(find \"$MOUNT\" -maxdepth 1 -name '*.app' -print -quit)\n\
-         if [ -z \"$SRC\" ]; then echo \"The disk image holds no app.\" >&2; exit 1; fi\n\
-         echo \"Copying $SRC to {target}/{app}…\"\n\
-         rm -rf {target}/{app}\n\
-         ditto \"$SRC\" {target}/{app}\n\
-         echo \"Starting {app}…\"\n\
-         open {target}/{app}\n",
-        binary = lcc_brand::BINARY,
-        dmg = sh_quote(&dmg.to_string_lossy()),
-        target = sh_quote(&target.to_string_lossy()),
-        app = sh_quote(&app),
-    );
-    std::fs::write(&script, body).map_err(|e| UpdateError::Io(format!("could not write {}: {e}", script.display())))?;
-    // `osascript` opens Terminal on the script: the app quits, the script finishes the job and
-    // starts the new build. Terminal is asked to run the file, not to type anything.
-    let script_path = script.to_string_lossy().to_string();
-    Command::new("osascript")
-        .arg("-e")
-        .arg(format!("tell application \"Terminal\" to do script \"sh {}\"", script_path.replace('\\', "\\\\").replace('"', "\\\"")))
-        .spawn()
-        .map_err(|e| UpdateError::Install(format!("could not open a terminal to finish the update: {e}")))?;
-    Ok(Outcome {
-        message: format!(
-            "The disk image is being installed into {}. A terminal window shows the progress; the app starts again when it is done.",
-            target.display()
-        ),
-        exit: true,
-    })
+fn install_dmg(dmg: &Path, version: &str) -> Result<Outcome, UpdateError> {
+    macos::install_dmg(dmg, version)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn install_dmg(dmg: &Path) -> Result<Outcome, UpdateError> {
+fn install_dmg(dmg: &Path, _version: &str) -> Result<Outcome, UpdateError> {
     Err(UpdateError::Install(format!("{} is a macOS disk image; this system runs it another way", dmg.display())))
 }
 
@@ -349,7 +315,7 @@ pub fn reveal(file: &Path) -> Result<(), UpdateError> {
         c.arg(format!("/select,{}", file.display()));
         c
     } else if cfg!(target_os = "macos") {
-        let mut c = Command::new("open");
+        let mut c = Command::new("/usr/bin/open");
         c.arg("-R").arg(file);
         c
     } else {
@@ -370,7 +336,7 @@ mod tests {
 
     #[test]
     fn quoting_keeps_a_path_one_argument() {
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "macos")))]
         {
             assert_eq!(sh_quote("/tmp/a b"), "'/tmp/a b'");
             assert_eq!(sh_quote("/tmp/it's"), "'/tmp/it'\\''s'");
@@ -388,6 +354,24 @@ mod tests {
         assert!(a.destination.is_some());
         let c = plan(Kind::Checksums, Path::new("/tmp/SHA256SUMS.txt"), "1.2.3");
         assert!(c.summary.contains("Nothing to install"));
+    }
+
+    #[test]
+    fn a_disk_image_plan_names_no_folder_when_this_program_is_not_in_an_app_bundle() {
+        // a cargo test binary is not inside an .app: there is nothing to replace, and above all
+        // not whatever happens to be in /Applications
+        assert_eq!(app_bundle(), None);
+        let p = plan(Kind::Dmg, Path::new("/tmp/a.dmg"), "1.2.3");
+        assert_eq!(p.destination, None, "a program outside a bundle must not plan an install into {:?}", p.destination);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn installing_a_disk_image_from_outside_an_app_bundle_points_to_the_release_page() {
+        // the test binary is not inside an .app: the install is refused before the image is read
+        let err = install(Kind::Dmg, &downloaded("nowhere/a.dmg"), "1.2.3").expect_err("refused");
+        assert!(matches!(err, UpdateError::Install(_)), "{err}");
+        assert!(err.to_string().contains("/releases/tag/v1.2.3"), "the error should point to the release page: {err}");
     }
 
     #[test]

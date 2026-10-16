@@ -300,6 +300,14 @@ through the same entry point. An agent can cull a shoot, develop it, mask a sky 
   thread: drafts during drags, full quality on release.
 - **Local-first.** No account, no cloud, no telemetry, no subscription. Your catalog is an append-only log of
   human-readable operations you can diff, back up or replay.
+- **Online only when you ask.** The app reaches the network only for something you turn on or start: update
+  checks (Help ▸ Check for Updates…, or at start-up once you tick "Check for updates when the app starts", which is
+  off by default), model and lens-profile downloads, map tiles and place-name searches (geocoding), Immich,
+  publishing (SFTP), network printing (IPP), Wi-Fi tethering (PTP/IP to the camera), remote denoise and AI-mask
+  (SAM 3) workers on a server you name, and plug-ins you grant network access to. The control port listens on this
+  computer only, and Edit in PhotoCraft talks to PhotoCraft on this computer. An update check asks GitHub for this
+  project's release list; GitHub sees your IP address, the time and a User-Agent of the app's name and version, and
+  nothing else is sent.
 
 <br>
 

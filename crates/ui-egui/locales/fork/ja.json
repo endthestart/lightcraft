@@ -1279,6 +1279,8 @@
   "Install and Relaunch": "インストールして再起動",
   "Skip This Version": "このバージョンをスキップ",
   "Check for updates when the app starts": "起動時に更新を確認する",
+  "Checking for updates when the app starts is still off": "起動時の更新確認はオフのままです",
+  "Update settings not saved": "更新の設定は保存されていません",
   "Include prereleases (release candidates)": "プリリリース（RC）も含める",
   "These settings are saved in the app's settings folder.": "これらの設定はアプリの設定フォルダーに保存されます。",
   "File date": "ファイルの日付",

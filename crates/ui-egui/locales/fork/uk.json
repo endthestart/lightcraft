@@ -1018,6 +1018,8 @@
   "Install and Relaunch": "Встановити й перезапустити",
   "Skip This Version": "Пропустити цю версію",
   "Check for updates when the app starts": "Перевіряти оновлення під час запуску",
+  "Checking for updates when the app starts is still off": "Перевірка оновлень під час запуску досі вимкнена",
+  "Update settings not saved": "Налаштування оновлень не збережено",
   "Include prereleases (release candidates)": "Включати попередні версії (RC)",
   "These settings are saved in the app's settings folder.": "Ці налаштування зберігаються в папці налаштувань застосунка.",
   "File date": "Дата файлу",

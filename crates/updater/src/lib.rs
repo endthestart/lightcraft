@@ -5,15 +5,16 @@
 //! The pieces, in the order a session uses them:
 //!
 //! 1. [`check`] reads the release feed — the static `latest.json` the release pipeline publishes,
-//!    GitHub's Releases API, or a feed URL the environment points at ([`Options::manifest_url`],
-//!    `<PREFIX>_UPDATE_URL`) — compares the newest release's version with this build ([`version`]),
-//!    and picks the asset that belongs to this platform ([`target`]).
+//!    GitHub's Releases API, or a feed a Rust caller names ([`Options::manifest_url`]: a test or a
+//!    mirror) — compares the newest release's version with this build ([`version`]), and picks the
+//!    asset that belongs to this platform ([`target`]). Only files under this repository's release
+//!    downloads are offered, and only over https.
 //! 2. [`download`] fetches that asset into the cache folder, resuming an interrupted transfer,
 //!    capped, and checked against the size the feed states and the release's `SHA256SUMS.txt`
 //!    ([`checksum`]) before it is renamed into place. A file that fails its check is deleted.
 //! 3. [`install`] says what installing will do ([`install::Plan`]) and, when asked, does it: the
-//!    Windows installer runs, a macOS disk image is mounted and its app copied over the running
-//!    one, an AppImage replaces itself, and anything else is laid out where the user can unpack
+//!    Windows installer runs, a macOS disk image is mounted and its app checked and swapped in for
+//!    the running one, an AppImage replaces itself, and anything else is laid out where the user can unpack
 //!    it. Every path ends with the app running again, or with a sentence saying what to do.
 //!
 //! Never a panic: no network, a rate-limited API, a release without a file for this machine, a
@@ -39,7 +40,9 @@ mod download;
 mod install;
 mod target;
 
-pub use check::{Cache, Checked, MAX_DOWNLOAD_BYTES, Options, REUSE_AFTER, Update, api_url, check, from_release, manifest_url, override_url};
+pub use check::{
+    Cache, Checked, MAX_DOWNLOAD_BYTES, Options, REUSE_AFTER, Update, api_url, check, from_release, manifest_url, release_download_prefix,
+};
 pub use download::{Downloaded, client, download, part_path, stage_dir};
 pub use error::UpdateError;
 pub use install::{Plan, Restart, install, install_with, plan, reveal, runs_from_appimage};

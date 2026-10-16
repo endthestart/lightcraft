@@ -2,6 +2,16 @@
 
 ## 2026-10-15
 
+### The start-up update check is opt-in
+- The app no longer contacts GitHub at start unless you ask it to: turn on "Check for updates when the app
+  starts" in Settings ▸ General, in the welcome dialog of a first start, or in the update window. Help ▸ Check for
+  Updates… works as before. Settings that were already saved are kept.
+### Updates on macOS install in place
+- Install and Relaunch now copies the new version beside the app and swaps it in, puts the old one back if
+  anything fails, and starts the new version without opening Terminal or asking for automation access. A copy that
+  isn't inside an app bundle (a source build) links to the release page instead of replacing the app in
+  /Applications.
+
 ### Oldest photos first
 - The grid now sorts by capture date with the oldest photo first by default, as Lightroom Classic does, instead of
   the newest first. A library you already use keeps its sort: Ascending and Descending are in the sort menu.

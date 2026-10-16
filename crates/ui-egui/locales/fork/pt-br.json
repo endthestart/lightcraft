@@ -1279,6 +1279,8 @@
   "Install and Relaunch": "Instalar e reiniciar",
   "Skip This Version": "Ignorar esta versão",
   "Check for updates when the app starts": "Verificar atualizações ao iniciar o aplicativo",
+  "Checking for updates when the app starts is still off": "A verificação de atualizações ao iniciar o app continua desativada",
+  "Update settings not saved": "Configurações de atualização não salvas",
   "Include prereleases (release candidates)": "Incluir pré-lançamentos (release candidates)",
   "These settings are saved in the app's settings folder.": "Estes ajustes são salvos na pasta de configurações do aplicativo.",
   "File date": "Data do arquivo",

@@ -21,10 +21,14 @@ pub enum CatalogDialog {
     /// First start, no catalog to open yet: create one (name, location, sample photos or not) or
     /// open one. `foreign`: libraries of another app found where this app's would be (e.g. the
     /// upstream app's), which can't be opened here; named so the user knows why they don't open.
+    /// `updates`: the user ticked "Check for updates when the app starts" (unticked at first).
+    /// Each action carries it as `checkAtStartup`, and it is saved through `update.prefs` only
+    /// when that action opens a catalog; closing the dialog saves nothing.
     Welcome {
         parent: String,
         name: String,
         demo: bool,
+        updates: bool,
         foreign: Vec<String>,
     },
     /// Pick a catalog: the recent ones, New…, Open….
@@ -69,6 +73,9 @@ pub struct CatalogUi {
     frames: u32,
     /// Files from the command line of a first start, imported once a catalog is open.
     pub pending_import: Vec<String>,
+    /// Why the welcome dialog's "Check for updates when the app starts" couldn't be turned on once
+    /// its catalog opened: said in a toast on the next frame.
+    pub update_error: Option<String>,
 }
 
 /// The welcome dialog: a new catalog under the Pictures folder by default.
@@ -77,7 +84,8 @@ pub fn welcome(app: &mut LccApp, foreign: Vec<String>) {
         .and_then(|d| d.parent().map(Path::to_path_buf))
         .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default();
-    app.catalog_ui.dialog = Some(CatalogDialog::Welcome { parent, name: lcc_brand::LIBRARY_DEFAULT.to_string(), demo: false, foreign });
+    app.catalog_ui.dialog =
+        Some(CatalogDialog::Welcome { parent, name: lcc_brand::LIBRARY_DEFAULT.to_string(), demo: false, updates: false, foreign });
 }
 
 impl CatalogUi {
@@ -114,14 +122,29 @@ impl CatalogUi {
 
 /// Open a catalog chosen by the user (entry point or folder): validated first, so a folder that
 /// isn't a catalog is an error rather than a new, empty library.
-fn open_catalog(app: &mut LccApp, path: &str) -> Result<Value, String> {
+fn open_catalog(app: &mut LccApp, path: &str, p: &Value) -> Result<Value, String> {
     let dir = lcc_catalog::library::resolve(Path::new(path)).map_err(|e| e.to_string())?;
-    open_dir(app, &dir, false)
+    open_dir(app, &dir, false, p)
 }
 
-fn open_dir(app: &mut LccApp, dir: &Path, demo: bool) -> Result<Value, String> {
+/// Whether the call carries the welcome dialog's ticked "Check for updates when the app starts"
+/// (`checkAtStartup: true`). It travels in the call's own parameters, so a folder dialog that
+/// answers later brings it back with its answer, and no other call ever takes it.
+fn check_at_startup(p: &Value) -> bool {
+    p.get("checkAtStartup").and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// Open the catalog in `dir`; with `checkAtStartup` in `p`, the start-up update check is turned
+/// on (through `update.prefs`) once it is open.
+fn open_dir(app: &mut LccApp, dir: &Path, demo: bool, p: &Value) -> Result<Value, String> {
     let r = crate::panels::settings::open_library(app, &json!({"path": dir.to_string_lossy(), "demo": demo}))?;
     app.catalog_ui.touch(dir);
+    if check_at_startup(p)
+        && let Err(e) = app.session.execute("update.prefs", &json!({"checkAtStartup": true}))
+    {
+        log::warn!("update.prefs: {e}");
+        app.catalog_ui.update_error = Some(e.to_string());
+    }
     app.catalog_ui.dialog = None;
     Ok(r)
 }
@@ -145,16 +168,16 @@ pub fn run(app: &mut LccApp, id: &str, p: &Value) -> Option<Result<Value, String
     Some(match id {
         "catalog.new" => new_catalog(app, p),
         "catalog.open" => match str_of(p, "path") {
-            Some(path) => open_catalog(app, path),
+            Some(path) => open_catalog(app, path, p),
             None => match pick_folder(app, id, p, "path", "Open Catalog") {
-                Ok(Some(path)) => open_catalog(app, &path),
+                Ok(Some(path)) => open_catalog(app, &path, p),
                 Ok(None) => Ok(Value::Null),
                 Err(e) => Err(e),
             },
         },
         "catalog.openRecent" => match str_of(p, "path") {
             Some(path) => {
-                let r = open_catalog(app, path);
+                let r = open_catalog(app, path, p);
                 if r.is_err() && !Path::new(path).exists() {
                     // gone: drop it from the list
                     app.catalog_ui.recent().remove(Path::new(path));
@@ -230,13 +253,13 @@ fn new_catalog(app: &mut LccApp, p: &Value) -> Result<Value, String> {
             let r = if p.get("demo").and_then(Value::as_bool).unwrap_or(false) {
                 // an empty folder, opened as a new library: it starts with the demo photos
                 let dir = lcc_catalog::library::create_folder(Path::new(parent), name).map_err(|e| e.to_string())?;
-                let mut r = open_dir(app, &dir, true)?;
+                let mut r = open_dir(app, &dir, true, p)?;
                 r["entry"] = json!(lcc_catalog::library::find_entry(&dir));
                 r
             } else {
                 let entry = lcc_catalog::library::create(Path::new(parent), name).map_err(|e| e.to_string())?;
                 let dir = entry.parent().map(Path::to_path_buf).ok_or("catalog without a folder")?;
-                let mut r = open_dir(app, &dir, false)?;
+                let mut r = open_dir(app, &dir, false, p)?;
                 r["entry"] = json!(entry);
                 r
             };
@@ -283,8 +306,16 @@ fn display_name(p: &Path) -> String {
     format!("{name} — {}", dir.parent().map(|d| d.display().to_string()).unwrap_or_default())
 }
 
+/// Whether Open Catalog…'s folder dialog is still up.
+fn picking_catalog(app: &LccApp) -> bool {
+    app.pending_picks.iter().any(|p| p.command == "catalog.open")
+}
+
 /// Each frame: Alt held while the window opens shows the chooser; then the dialog, if any.
 pub fn show(app: &mut LccApp, ctx: &egui::Context) {
+    if let Some(e) = app.catalog_ui.update_error.take() {
+        app.toast_error(ctx, format!("{}: {e}", crate::i18n::tr("Checking for updates when the app starts is still off")));
+    }
     if app.catalog_ui.frames < 30 {
         app.catalog_ui.frames += 1;
         let alt = ctx.input(|i| i.modifiers.alt);
@@ -330,8 +361,8 @@ pub fn show(app: &mut LccApp, ctx: &egui::Context) {
             // with it in a window too short for the whole dialog
             let mut layout = crate::dialog_frame::ModalLayout::begin(ui, window_id);
             layout.body(ui, |ui| match &mut dlg {
-                CatalogDialog::Welcome { parent, name, demo, foreign } => {
-                    welcome_ui(app, ui, &t, parent, name, demo, foreign, &mut action);
+                CatalogDialog::Welcome { parent, name, demo, updates, foreign } => {
+                    welcome_ui(app, ui, &t, parent, name, demo, updates, foreign, &mut action);
                 }
                 CatalogDialog::Chooser => chooser(app, ui, &mut action, &mut close),
                 CatalogDialog::NewCatalog { parent, name } => {
@@ -412,7 +443,11 @@ pub fn show(app: &mut LccApp, ctx: &egui::Context) {
         // Catalog Settings buttons, this one stays
         let prev = app.catalog_ui.dialog.take();
         let r = app.run(&cmd, params);
-        let keep = r.is_err() || matches!(cmd.as_str(), "catalog.backup" | "catalog.checkIntegrity" | "catalog.optimize");
+        // the welcome dialog also stays (waiting) while its Open Catalog… folder dialog is up and
+        // nothing is open: cancelling that leaves the user where they were
+        let keep = r.is_err()
+            || (welcoming && cmd == "catalog.open" && picking_catalog(app) && app.session.library.is_none())
+            || matches!(cmd.as_str(), "catalog.backup" | "catalog.checkIntegrity" | "catalog.optimize");
         if keep && app.catalog_ui.dialog.is_none() {
             app.catalog_ui.dialog = prev;
         }
@@ -443,6 +478,7 @@ fn welcome_ui(
     parent: &mut String,
     name: &mut String,
     demo: &mut bool,
+    updates: &mut bool,
     foreign: &[String],
     action: &mut Option<(String, Value)>,
 ) {
@@ -451,6 +487,11 @@ fn welcome_ui(
     ui.label(dim(
         "{app} keeps the records of your photos, their edits and history in a catalog. Create one to start, or open one you already have. Your photos stay where they are.",
     ));
+    // Open Catalog…'s folder dialog is up: everything here waits for it
+    if picking_catalog(app) {
+        ui.label(egui::RichText::new(crate::i18n::tr("Choose a folder…")).strong());
+        ui.disable();
+    }
     ui.add_space(4.0);
     ui.label(egui::RichText::new(crate::i18n::tr("Create a new catalog")).strong());
     ui.horizontal(|ui| {
@@ -470,11 +511,13 @@ fn welcome_ui(
     });
     let r = ui.checkbox(demo, crate::i18n::tr("Add sample photos to try things out"));
     crate::widgets::register(ui.ctx(), "check:welcomeDemo", r.rect);
+    let r = ui.checkbox(updates, crate::i18n::tr("Check for updates when the app starts"));
+    crate::widgets::register(ui.ctx(), "check:welcomeUpdates", r.rect);
     let ready = !name.trim().is_empty() && !parent.trim().is_empty();
     let r = ui.add_enabled(ready, egui::Button::new(egui::RichText::new(crate::i18n::tr("Create Catalog")).strong()).min_size(egui::vec2(0.0, 26.0)));
     crate::widgets::register(ui.ctx(), "button:welcomeCreate", r.rect);
     if r.clicked() {
-        *action = Some(("catalog.new".into(), json!({"parent": parent.trim(), "name": name.trim(), "demo": *demo})));
+        *action = Some(("catalog.new".into(), json!({"parent": parent.trim(), "name": name.trim(), "demo": *demo, "checkAtStartup": *updates})));
     }
     ui.separator();
     ui.label(egui::RichText::new(crate::i18n::tr("Open an existing catalog")).strong());
@@ -490,7 +533,7 @@ fn welcome_ui(
         let r = ui.selectable_label(false, display_name(p));
         crate::widgets::register(ui.ctx(), format!("item:welcomeRecent{i}"), r.rect);
         if r.clicked() {
-            *action = Some(("catalog.openRecent".into(), json!({"path": p})));
+            *action = Some(("catalog.openRecent".into(), json!({"path": p, "checkAtStartup": *updates})));
         }
     }
     if !foreign.is_empty() {
@@ -504,7 +547,7 @@ fn welcome_ui(
         let r = ui.add_enabled(app.services.pick_folder.is_some(), egui::Button::new(crate::i18n::tr("Open Catalog…")));
         crate::widgets::register(ui.ctx(), "button:welcomeOpen", r.rect);
         if r.clicked() {
-            *action = Some(("catalog.open".into(), json!({})));
+            *action = Some(("catalog.open".into(), json!({"checkAtStartup": *updates})));
         }
         let r = ui.button(crate::i18n::tr("Quit"));
         crate::widgets::register(ui.ctx(), "button:welcomeQuit", r.rect);

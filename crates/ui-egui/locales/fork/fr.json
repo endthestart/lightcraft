@@ -1188,6 +1188,8 @@
   "Install and Relaunch": "Installer et redémarrer",
   "Skip This Version": "Ignorer cette version",
   "Check for updates when the app starts": "Rechercher des mises à jour au démarrage",
+  "Checking for updates when the app starts is still off": "La recherche de mises à jour au démarrage reste désactivée",
+  "Update settings not saved": "Réglages de mise à jour non enregistrés",
   "Include prereleases (release candidates)": "Inclure les préversions (release candidates)",
   "These settings are saved in the app's settings folder.": "Ces réglages sont enregistrés dans le dossier de réglages de l’application.",
   "File date": "Date du fichier",

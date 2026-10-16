@@ -1192,6 +1192,8 @@
   "Install and Relaunch": "安装并重启",
   "Skip This Version": "跳过此版本",
   "Check for updates when the app starts": "启动时检查更新",
+  "Checking for updates when the app starts is still off": "启动时检查更新仍处于关闭状态",
+  "Update settings not saved": "更新设置未保存",
   "Include prereleases (release candidates)": "包含预发版（RC）",
   "These settings are saved in the app's settings folder.": "这些设置保存在应用的设置文件夹中。",
   "File date": "文件日期",

@@ -5,10 +5,12 @@
 //! this version. The updater's state lives in the session (a check runs on a worker thread), so the
 //! window only reads `update.status` and dispatches `update.*`: nothing here has to survive a frame.
 //!
-//! Unless the user turns it off (the checkbox in the dialog, saved in the app's own settings
-//! folder), one check runs shortly after the app starts. It never opens the dialog by itself: a
-//! found release is announced with a toast, so a start does not interrupt whatever the user is
-//! doing.
+//! When the user turns it on (the checkbox in this dialog, in Settings ▸ General or in the welcome
+//! dialog, saved in the app's own settings folder through `update.prefs`), one check runs shortly
+//! after the app starts. Only a host that sets [`LccApp::startup_update_check`] (the desktop app
+//! with a settings folder of its own) runs it: headless sessions, `--memory` and
+//! `<PREFIX>_NO_PREFS` runs never check at start. It never opens the dialog by itself: a found
+//! release is announced with a toast, so a start does not interrupt whatever the user is doing.
 
 use serde_json::{Value, json};
 
@@ -37,7 +39,7 @@ pub fn poll(app: &mut LccApp, ctx: &egui::Context) {
     }
     if !app.ui.update_checked_at_startup {
         app.ui.update_checked_at_startup = true;
-        if app.session.updater.prefs().check_at_startup {
+        if app.startup_update_check && app.session.updater.prefs().check_at_startup {
             app.ui.update_checked_at = now + STARTUP_DELAY_S;
         }
     }
@@ -251,8 +253,11 @@ fn settings(app: &mut LccApp, ui: &mut egui::Ui, t: &Tokens) {
     register(ui.ctx(), "check:updateAtStartup", r.rect);
     let r = ui.checkbox(&mut prerelease, tr("Include prereleases (release candidates)"));
     register(ui.ctx(), "check:updatePrerelease", r.rect);
-    if check_at_startup != app.session.updater.prefs().check_at_startup || prerelease != app.session.updater.prefs().prerelease {
-        let _ = app.session.execute("update.prefs", &json!({"checkAtStartup": check_at_startup, "prerelease": prerelease}));
+    // not saved: the boxes show the stored values again next frame
+    if (check_at_startup != app.session.updater.prefs().check_at_startup || prerelease != app.session.updater.prefs().prerelease)
+        && let Err(e) = app.session.execute("update.prefs", &json!({"checkAtStartup": check_at_startup, "prerelease": prerelease}))
+    {
+        app.toast_error(ui.ctx(), format!("{}: {e}", tr("Update settings not saved")));
     }
     if !app.session.updater.persistent() {
         ui.label(egui::RichText::new(tr("These settings are saved in the app's settings folder.")).font(t.font(11.0)).color(t.text_dim));

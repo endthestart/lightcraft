@@ -61,8 +61,10 @@ download it for this system and install it; the app restarts afterwards. Things 
   `SHA256SUMS.txt`, against that SHA-256. A file that fails the check is deleted and nothing is installed.
 - A tarball or zip (Linux riscv64, FreeBSD, or a Windows portable build) is downloaded and its folder shown:
   quit the app and unpack it over the installation yourself.
-- Turning off "Check for updates when the app starts" stops the automatic check; Help → Check for Updates…
-  still works by hand. The setting lives in the app's own settings folder (`updates.json`), not in a catalog.
+- "Check for updates when the app starts" is off until you turn it on (Settings → General, the welcome dialog
+  of a first start, or the update dialog); Help → Check for Updates… always works by hand. The setting lives in
+  the app's own settings folder (`updates.json`), not in a catalog. Runs that keep no settings (`--memory`,
+  `<PREFIX>_NO_PREFS`) and headless sessions (`snapshot`, MCP) never check at start.
 
 ## Chinese or Japanese text shows boxes
 
@@ -77,7 +79,7 @@ skipped when the session starts unless you turn that off ([tethering.md](tetheri
 
 ## Network features
 
-Two things reach the network on their own: the update check (once, a few seconds after start-up, unless
-"Check for updates when the app starts" is off — see above), and nothing else. Map tiles, reverse geocoding,
+Nothing reaches the network on its own: the update check runs once, a few seconds after start-up, only when
+"Check for updates when the app starts" is ticked (off by default — see above). Map tiles, reverse geocoding,
 model downloads, Immich, SFTP upload and IPP printing all use the network too, and each asks or is configured
 explicitly. Behind a proxy or offline, the rest of the app works.
