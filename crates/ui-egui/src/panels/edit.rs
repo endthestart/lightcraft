@@ -1065,6 +1065,56 @@ impl ParametricCurve {
     }
 }
 
+/// What the parametric graph draws and drags: the region curve with the master point curve on top
+/// of it, stacked as `lcc_pipeline::finish::curve_luts` stacks them. A Point Curve preset such as
+/// Medium Contrast shows in the line, as in Lightroom; a drag still moves only the region sliders.
+pub(crate) struct StackedCurve {
+    pub(crate) param: ParametricCurve,
+    /// The master point curve, `None` while it is the identity.
+    master: Option<lcc_color::spline::MonotoneCurve>,
+}
+
+impl StackedCurve {
+    pub(crate) fn new(c: &ToneCurve) -> StackedCurve {
+        let master = (!ToneCurve::point_curve_is_identity(&c.master))
+            .then(|| lcc_color::spline::MonotoneCurve::new(&c.master.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>()));
+        StackedCurve { param: ParametricCurve::new(c), master }
+    }
+
+    /// The master point curve at a level.
+    pub(crate) fn master_at(&self, y: f64) -> f64 {
+        match &self.master {
+            Some(m) => m.eval(y.clamp(0.0, 1.0)).clamp(0.0, 1.0),
+            None => y,
+        }
+    }
+
+    /// The tone the renderer gives graph position `x`.
+    pub(crate) fn at(&self, x: f64) -> f64 {
+        self.master_at(self.param.at(x))
+    }
+
+    /// The region-curve level the master curve takes to `level`: what a drag on the drawn line
+    /// asks of the region sliders. Found by halving, as the master curve rises (falls, if it is
+    /// drawn upside down); where it is flat, any level of the flat part is a fine answer.
+    pub(crate) fn param_level(&self, level: f64) -> f64 {
+        if self.master.is_none() {
+            return level;
+        }
+        let rising = self.master_at(1.0) >= self.master_at(0.0);
+        let (mut lo, mut hi) = (0.0_f64, 1.0_f64);
+        for _ in 0..40 {
+            let mid = (lo + hi) / 2.0;
+            if (self.master_at(mid) < level) == rising {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        (lo + hi) / 2.0
+    }
+}
+
 /// Close a graph drag's `develop` interaction, as one undo step.
 ///
 /// It is closed when the drag ends *or* the pointer comes up without egui reporting `drag_stopped`
@@ -1091,13 +1141,14 @@ const PARAM_GRAB: f32 = 14.0;
 /// slider, the curve and what is drawn are the same state rather than three things kept in step.
 fn param_drag(app: &mut LccApp, ui: &mut egui::Ui, r: Rect, resp: &egui::Response, d: &DevelopSettings) {
     let t = Tokens::get(ui.ctx());
-    let model = ParametricCurve::new(&d.curve);
+    let stacked = StackedCurve::new(&d.curve);
+    let model = &stacked.param;
     let to_screen = |x: f64, y: f64| pos2(r.left() + x as f32 * r.width(), r.bottom() - y as f32 * r.height());
     let from_screen_x = |q: Pos2| ((q.x - r.left()) / r.width()).clamp(0.0, 1.0) as f64;
     // the graph x of a point, and how far it is from the drawn curve (in screen points)
     let near_curve = |q: Pos2| {
         let x = from_screen_x(q);
-        to_screen(x, model.at(x)).distance(q)
+        to_screen(x, stacked.at(x)).distance(q)
     };
     let drag_id = egui::Id::new("curve-param-drag");
     let cursor_id = egui::Id::new("curve-param-cursor");
@@ -1116,7 +1167,7 @@ fn param_drag(app: &mut LccApp, ui: &mut egui::Ui, r: Rect, resp: &egui::Respons
         let x = from_screen_x(q);
         let _ = app.run("develop.beginInteraction", json!({"label": "Parametric Curve"}));
         dragged = Some((model.region_at(x), x));
-        ui.data_mut(|dd| dd.insert_temp(cursor_id, to_screen(x, model.at(x))));
+        ui.data_mut(|dd| dd.insert_temp(cursor_id, to_screen(x, stacked.at(x))));
     }
     if let Some((region, x)) = dragged
         && resp.dragged()
@@ -1126,11 +1177,13 @@ fn param_drag(app: &mut LccApp, ui: &mut egui::Ui, r: Rect, resp: &egui::Respons
         let alt = ui.input(|i| i.modifiers.alt);
         let dd = ui.input(|i| i.pointer.delta());
         let step = if alt { vec2(dd.x * 0.1, dd.y * 0.1) } else { vec2(dd.x, dd.y) };
-        let start = to_screen(x, model.handle_level_at(region, model.amounts[region], x));
+        let start = to_screen(x, stacked.master_at(model.handle_level_at(region, model.amounts[region], x)));
         let cursor = ui.data(|d| d.get_temp::<Pos2>(cursor_id)).unwrap_or(start) + step;
         ui.data_mut(|d| d.insert_temp(cursor_id, cursor));
+        // the pointer is on the drawn (stacked) line: the region curve has to reach what the
+        // master curve takes to that level
         let level = ((r.bottom() - cursor.y) / r.height()).clamp(0.0, 1.0) as f64;
-        set = Some((PARAM_AMOUNTS[region], model.amount_at_level(region, level, x)));
+        set = Some((PARAM_AMOUNTS[region], model.amount_at_level(region, stacked.param_level(level), x)));
     }
     if let Some((id, v)) = set {
         let _ = app.run("develop.set", json!({"control": id, "value": v}));
@@ -1236,11 +1289,12 @@ fn curve_editor(app: &mut LccApp, ui: &mut egui::Ui, id: PhotoId, d: &DevelopSet
     let to_screen = |x: f64, y: f64| pos2(r.left() + x as f32 * r.width(), r.bottom() - y as f32 * r.height());
     let from_screen = |q: Pos2| (((q.x - r.left()) / r.width()).clamp(0.0, 1.0) as f64, ((r.bottom() - q.y) / r.height()).clamp(0.0, 1.0) as f64);
     if ch == "parametric" {
-        // The Effective curve: the model the renderer builds from the four region sliders, sampled
-        // here and rebuilt every frame. The graph holds no state of its own, so a slider moved by
-        // hand, a Reset or an Undo redraws it from the settings in the same frame it changes.
+        // The Effective curve: the model the renderer builds from the four region sliders, with the
+        // master point curve on top, sampled here and rebuilt every frame. The graph holds no state
+        // of its own, so a slider moved by hand, a preset, a Reset or an Undo redraws it from the
+        // settings in the same frame it changes.
         let c = &d.curve;
-        let model = ParametricCurve::new(c);
+        let model = StackedCurve::new(c);
         let pts: Vec<Pos2> =
             (0..=CURVE_SAMPLES).map(|i| to_screen(i as f64 / CURVE_SAMPLES as f64, model.at(i as f64 / CURVE_SAMPLES as f64))).collect();
         p.add(egui::Shape::line(pts, Stroke::new(2.0, Color32::from_gray(220))));
