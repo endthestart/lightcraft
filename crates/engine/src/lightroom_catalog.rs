@@ -585,12 +585,56 @@ pub fn read_with_progress(path: &Path, cancel: &AtomicBool, total: &AtomicUsize,
     if left_out > LEFT_OUT_NAMED {
         out.warnings.push(format!("{left_out} images left out in all: their original's file, folder or root record is missing or incomplete"));
     }
+    refuse_non_media(&mut out);
     ensure_read_active(cancel)?;
     Ok(out)
 }
 
 /// How many of the images left out of an import (no file, folder or root record) the warnings name one by one.
 const LEFT_OUT_NAMED: usize = 20;
+
+/// Drop the catalog's images whose original is not a file type LightCraft reads, saying so in the
+/// import's warnings.
+///
+/// The catalog decides these paths, and a record it leaves behind is one click from the system
+/// opener (Photo ▸ Edit In ▸ Open Original in Other Editor). A record for `payload.exe`,
+/// `start.lnk` or `Evil.app` would make a `.lrcat` someone was sent a way to have a program run
+/// (issue #2135), so such an image never becomes a photo: not imported, not relinkable, not
+/// openable. A virtual copy of a refused original goes with it — it has no original of its own.
+///
+/// Called where the catalog is read and again where its photos become records, so neither route
+/// can keep one; the second pass finds nothing left to say.
+pub(crate) fn refuse_non_media(data: &mut CatalogImport) {
+    // masters first: a virtual copy may come before its master in the table
+    let refused: HashSet<i64> = data
+        .photos
+        .iter()
+        .filter(|p| number(&p.image, "masterImage") == 0 && !crate::open_path::is_media(Path::new(&p.path)))
+        .map(|p| p.source_id)
+        .collect();
+    if refused.is_empty() {
+        return;
+    }
+    let mut warnings = Vec::new();
+    data.photos.retain(|p| {
+        let master = number(&p.image, "masterImage");
+        // `masterImage` is 0 for a master, so a refused id of 0 (a malformed catalog) must not
+        // take every master of the catalog with it
+        if master != 0 {
+            if !refused.contains(&master) {
+                return true;
+            }
+            warnings.push(format!("image {}: not imported; its original was not imported", p.source_id));
+            return false;
+        }
+        if !refused.contains(&p.source_id) {
+            return true;
+        }
+        warnings.push(format!("image {}: not imported; {} isn't one of the file types LightCraft reads", p.source_id, p.path));
+        false
+    });
+    data.warnings.extend(warnings);
+}
 
 fn ensure_read_active(cancel: &AtomicBool) -> Result<(), String> {
     if cancel.load(Ordering::Relaxed) { Err("Lightroom import cancelled".into()) } else { Ok(()) }
@@ -767,8 +811,10 @@ pub(crate) struct ApplyPrepared<'a> {
     pub(crate) undo0: usize,
 }
 
-pub(crate) fn apply_prepared(s: &mut crate::Session, data: CatalogImport, context: ApplyPrepared<'_>) -> crate::Result<AppliedImport> {
+pub(crate) fn apply_prepared(s: &mut crate::Session, mut data: CatalogImport, context: ApplyPrepared<'_>) -> crate::Result<AppliedImport> {
     let ApplyPrepared { update_existing, files, index, archive_path, missing_sources, undo0 } = context;
+    // nothing but a file type LightCraft reads becomes a record, whichever route got here (#2135)
+    refuse_non_media(&mut data);
     validate(&data).map_err(error)?;
     let mut warnings = data.warnings.clone();
     let duplicates: HashMap<_, _> = files.duplicates.iter().filter_map(|d| d.existing.map(|id| (key(&d.path), PhotoId(id)))).collect();
@@ -1044,6 +1090,48 @@ mod tests {
             warnings: Vec::new(),
         }
     }
+    /// A crafted `.lrcat` that names a program as a photo's original gets no record for it, so
+    /// Photo ▸ Edit In ▸ Open Original has nothing to hand the system opener (#2135). Its virtual
+    /// copies go with it; the catalog's real photos still import.
+    #[test]
+    fn a_catalog_original_that_is_not_a_photo_file_is_not_imported() {
+        let mut data = sample();
+        let mut exe = data.photos[1].clone();
+        exe.source_id = 3;
+        exe.uuid = "payload".into();
+        exe.path = "/Users/sky/Downloads/payload.exe".into();
+        exe.image = row(json!({"id_local":3,"fileFormat":"ARW","fileWidth":20,"fileHeight":10}));
+        let mut exe_copy = exe.clone();
+        exe_copy.source_id = 4;
+        exe_copy.uuid = "payload-copy".into();
+        exe_copy.path = "/Users/sky/Downloads/payload.exe".into();
+        exe_copy.image = row(json!({"id_local":4,"masterImage":3,"copyName":"Mono"}));
+        // the copy comes before its master, as a catalog's table order may have it
+        data.photos.insert(0, exe_copy);
+        data.photos.push(exe);
+        for bad in [r"C:\Users\sky\start.lnk", "/Applications/Evil.app", "/Users/sky/go.command", "/Users/sky/run.bat"] {
+            let mut one = data.clone();
+            one.photos.retain(|p| p.source_id < 3);
+            let mut planted = one.photos[1].clone();
+            planted.source_id = 5;
+            planted.uuid = "planted".into();
+            planted.path = bad.into();
+            planted.image = row(json!({"id_local":5,"fileFormat":"ARW"}));
+            one.photos.push(planted);
+            let mut s = crate::Session::new();
+            let r = apply(&mut s, one, false).unwrap();
+            assert_eq!(r["photos"], 2, "{bad} is not catalogued: {r}");
+            assert!(s.catalog.photos().all(|p| !matches!(&p.source, Source::File { path } if path == bad)), "{bad} became a library record");
+        }
+        let mut s = crate::Session::new();
+        let r = apply(&mut s, data, false).unwrap();
+        assert_eq!(r["photos"], 2, "only the real master and its copy: {r}");
+        assert!(s.catalog.photos().all(|p| !matches!(&p.source, Source::File { path } if path.ends_with(".exe"))), "the program was catalogued");
+        let warnings = r["warnings"].to_string();
+        assert!(warnings.contains("payload.exe") && warnings.contains("file types LightCraft reads"), "{warnings}");
+        assert!(warnings.contains("image 4: not imported"), "the virtual copy of the refused original goes with it: {warnings}");
+    }
+
     #[test]
     fn offline_local_master_and_copy_join_library_with_one_undo_step() {
         let mut s = crate::Session::new();
