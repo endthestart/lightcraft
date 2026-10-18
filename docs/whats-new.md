@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-18
+
+### The Before view no longer flashes the next photo's edits
+- With the Before view on (`\`), stepping to an edited photo showed its edits for a moment before the Before render
+  arrived (issue #2248). The Before side now waits for its own render and says "Rendering…" meanwhile. A photo with no
+  edits still shows its stand-in at once.
+
 ## 2026-10-14
 
 ### Model downloads time out on a name that doesn't resolve
