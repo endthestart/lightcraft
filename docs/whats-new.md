@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-18
+
+### An unknown filter key is an error
+- `catalog.query {filter}` and `library.filter` refuse a key that isn't a filter field (`cameraModel` instead of
+  `camera`, say) and name it, suggesting the nearest one (issue #2241). The key used to be ignored, so a script
+  thinking it had a few photos got the whole library.
+
 ## 2026-10-14
 
 ### Model downloads time out on a name that doesn't resolve

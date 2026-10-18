@@ -913,3 +913,15 @@ fn the_catalog_remembers_which_photos_its_latest_ops_changed_and_what_of_them() 
     assert_eq!(c.touched_since(long_ago), None);
     assert_eq!(c.touched_since(c.revision - 10), Some(vec![a]));
 }
+
+/// `Filter::KEYS` names exactly the fields a filter serializes, so a new field can't be refused.
+#[test]
+fn filter_keys_match_its_fields() {
+    let f = Filter { only: vec![PhotoId(1)], labels: vec![ColorLabel::Red], rule_set: Some(Default::default()), ..Default::default() };
+    let v = serde_json::to_value(&f).unwrap();
+    let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+    let mut known = Filter::KEYS.to_vec();
+    keys.sort_unstable();
+    known.sort_unstable();
+    assert_eq!(keys, known);
+}
