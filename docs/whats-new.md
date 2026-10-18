@@ -1,5 +1,11 @@
 # What's new in LightCraft
 
+## 2026-10-18
+
+### Every raw shows in the web picker
+- File ▸ Import Photos… in the web version now lists every format the import reads, CR3, NRW, RAF, ORF, RW2, PEF,
+  SRW and the rest included, in upper and lower case, instead of a shorter hand-kept list (issue #2212).
+
 ## 2026-10-14
 
 ### Lightroom radial masks on the right side
