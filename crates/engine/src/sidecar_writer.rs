@@ -34,6 +34,8 @@ struct State {
     busy: usize,
     done: Vec<Done>,
     stop: bool,
+    /// The folder of the write being made.
+    current: Option<PathBuf>,
     /// The thread has made every queued write and ended.
     exited: bool,
 }
@@ -88,6 +90,12 @@ impl Writer {
     pub fn pending(&self) -> usize {
         let s = lock(&self.shared);
         s.jobs.len() + s.busy
+    }
+
+    /// The folder of the write being made, or of the next one queued.
+    pub fn stuck_folder(&self) -> Option<PathBuf> {
+        let s = lock(&self.shared);
+        s.current.clone().or_else(|| s.queue.front().and_then(|id| s.jobs.get(id)).and_then(|j| j.preferred.parent().map(PathBuf::from)))
     }
 
     /// Wait until every queued write is made, at most `timeout`. Whether it is idle.
@@ -151,6 +159,7 @@ fn run(shared: &Shared) {
                 if let Some(id) = s.queue.pop_front() {
                     if let Some(job) = s.jobs.remove(&id) {
                         s.busy += 1;
+                        s.current = job.preferred.parent().map(PathBuf::from);
                         break job;
                     }
                     continue;
@@ -166,6 +175,7 @@ fn run(shared: &Shared) {
             .unwrap_or_else(|_| Err(format!("{}: writing the sidecar failed", job.preferred.display())));
         let mut s = lock(shared);
         s.busy = s.busy.saturating_sub(1);
+        s.current = None;
         s.done.push((job.id, job.original, result));
         shared.1.notify_all();
     }

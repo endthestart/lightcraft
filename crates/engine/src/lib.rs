@@ -248,6 +248,9 @@ pub struct Session {
     /// The background sidecar writer, when the host turned it on ([`Session::set_background_sidecar_writes`]).
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) sidecar_writer: Option<sidecar_writer::Writer>,
+    /// How long a file operation waits for the background sidecar writes queued before it ([`Session::settle_sidecar_writes`]).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) sidecar_flush_limit: std::time::Duration,
     /// AI denoise: the model in use, the photos that have their picture and the work in progress.
     pub(crate) denoise: denoise::State,
     /// Where the host keeps face models (one folder each); `None` where there is no file system (the web).
@@ -442,6 +445,8 @@ impl Session {
             unsaved_sidecars: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             sidecar_writer: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            sidecar_flush_limit: std::time::Duration::from_secs(30),
             denoise: Default::default(),
             face_models_dir: None,
             face_downloads: Default::default(),
@@ -617,7 +622,7 @@ impl Session {
     fn apply_catalog(&mut self, op: Op) -> Result<Op> {
         // a sidecar write still queued for a photo whose file moves, goes or changes would land at the old place
         if op_moves_files(&op) {
-            self.flush_sidecar_writes();
+            self.settle_sidecar_writes()?;
         }
         // Retain only cache IDs while the catalog consumes the operation. Cloning an import
         // batch here also cloned every photo, although commit already keeps the journal copy.

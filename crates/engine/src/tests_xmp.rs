@@ -1486,3 +1486,43 @@ fn a_queued_write_whose_original_went_away_waits_for_a_retry() {
     s.set_background_sidecar_writes(false);
     let _ = std::fs::remove_dir_all(&src);
 }
+
+/// While a background sidecar write is stuck (a share that stopped answering; here a FIFO nobody writes to), the file
+/// operations it could race refuse with an error that says so, instead of going ahead after the wait: a rename, a
+/// sidecar read or save on request, a change of the sidecar preferences. Once the write lands they work again.
+#[cfg(unix)]
+#[test]
+fn file_operations_refuse_while_a_sidecar_write_is_stuck() {
+    let src = temp_dir("auto-background-stuck");
+    write_png(&src.join("a.png"), 4);
+    let mut s = Session::new().with_fs();
+    s.execute("library.import", &json!({"paths": [src.to_string_lossy()]})).unwrap();
+    s.execute("library.xmpPreferences", &json!({"autoWrite": true})).unwrap();
+    s.set_background_sidecar_writes(true);
+    s.flush_sidecar_writes();
+    s.set_sidecar_flush_limit(std::time::Duration::from_millis(100));
+    let fifo = src.join("a.xmp");
+    let _ = std::fs::remove_file(&fifo);
+    if !std::process::Command::new("mkfifo").arg(&fifo).status().is_ok_and(|st| st.success()) {
+        return;
+    }
+    let id = s.catalog.photos().next().unwrap().id.0;
+    s.execute("photo.rate", &json!({"ids": [id], "rating": 3})).unwrap();
+    for (command, params) in [
+        ("photo.rename", json!({"ids": [id], "template": "renamed"})),
+        ("photo.readMetadataFromFile", json!({"ids": [id]})),
+        ("photo.saveMetadataToFile", json!({"ids": [id]})),
+        ("library.xmpPreferences", json!({"naming": "full"})),
+    ] {
+        let e = s.execute(command, &params).expect_err(command).to_string();
+        assert!(e.contains("still running") && e.contains(&src.to_string_lossy().to_string()), "{command}: {e}");
+    }
+    assert!(src.join("a.png").exists(), "nothing was renamed");
+    // the share answers: the write lands and the rename goes ahead
+    drop(std::fs::OpenOptions::new().write(true).open(&fifo).unwrap());
+    s.set_sidecar_flush_limit(std::time::Duration::from_secs(10));
+    s.execute("photo.rename", &json!({"ids": [id], "template": "renamed"})).unwrap();
+    assert!(std::fs::read_to_string(src.join("renamed.xmp")).unwrap().contains("<xmp:Rating>3</xmp:Rating>"));
+    s.set_background_sidecar_writes(false);
+    let _ = std::fs::remove_dir_all(&src);
+}

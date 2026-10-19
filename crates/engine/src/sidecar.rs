@@ -880,16 +880,35 @@ impl Session {
         0
     }
 
-    /// Wait for the background sidecar writes queued so far (at most 30 s) and take them in: before a photo's file
-    /// moves, before sidecars are saved or read on request, and when the library closes.
+    /// Wait for the background sidecar writes queued so far (at most 30 s) and take them in: when the library closes
+    /// or another opens, and before a retry. A write still stuck then is logged and left to finish.
     pub fn flush_sidecar_writes(&mut self) {
+        if let Err(e) = self.settle_sidecar_writes() {
+            log::warn!("{e}");
+        }
+    }
+
+    /// [`Self::flush_sidecar_writes`] for a file operation the queued writes could race (a photo's file moving, a
+    /// sidecar read or saved on request, a change of the sidecar preferences): a write still stuck after the wait (a
+    /// network share that stopped answering) fails it, so nothing lands at an old path.
+    pub(crate) fn settle_sidecar_writes(&mut self) -> Result<()> {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            if self.sidecar_writer.as_ref().is_some_and(|w| w.pending() > 0 && !w.wait_idle(std::time::Duration::from_secs(30))) {
-                log::warn!("XMP sidecar writes were still running after 30 s");
-            }
+            let limit = self.sidecar_flush_limit;
+            let stuck = self.sidecar_writer.as_ref().filter(|w| w.pending() > 0 && !w.wait_idle(limit)).map(|w| w.stuck_folder());
             self.poll_sidecar_writes();
+            if let Some(folder) = stuck {
+                let folder = folder.map_or_else(|| "the photos' folder".to_string(), |f| f.display().to_string());
+                return Err(EngineError::Other(format!("XMP writes to {folder} are still running; try again in a moment")));
+            }
         }
+        Ok(())
+    }
+
+    /// How long [`Self::settle_sidecar_writes`] waits (tests make it short).
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(crate) fn set_sidecar_flush_limit(&mut self, limit: std::time::Duration) {
+        self.sidecar_flush_limit = limit;
     }
 
     /// How many photos have an automatic sidecar write waiting (it failed: the folder offline, read-only or full).

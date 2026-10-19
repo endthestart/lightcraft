@@ -9,7 +9,7 @@ use crate::{Result, Session};
 
 fn save(s: &mut Session, p: &Value) -> Result<Value> {
     // an automatic write still queued would land after this one
-    s.flush_sidecar_writes();
+    s.settle_sidecar_writes()?;
     let mut written = Vec::new();
     let mut merged = Vec::new();
     let mut backups = Vec::new();
@@ -36,7 +36,7 @@ fn save(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn read(s: &mut Session, p: &Value) -> Result<Value> {
     // read what the automatic writes queued so far wrote
-    s.flush_sidecar_writes();
+    s.settle_sidecar_writes()?;
     let mut ops = Vec::new();
     let mut read = Vec::new();
     let mut failed = Vec::new();
@@ -68,7 +68,7 @@ fn read(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn prefs(s: &mut Session, p: &Value) -> Result<Value> {
     // (a change of naming applies to writes made from now on)
-    s.flush_sidecar_writes();
+    s.settle_sidecar_writes()?;
     if let Some(a) = p.get("autoWrite").and_then(Value::as_bool) {
         s.xmp.auto_write = a;
     }
