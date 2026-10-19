@@ -823,7 +823,7 @@ impl Session {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if on && self.sidecar_writer.is_none() {
-                self.sidecar_writer = crate::sidecar_writer::Writer::start();
+                self.sidecar_writer = crate::sidecar_writer::Writer::start(self.activity.clone());
             } else if !on && self.sidecar_writer.is_some() {
                 self.flush_sidecar_writes();
                 self.sidecar_writer = None;

@@ -36,6 +36,11 @@ struct State {
     stop: bool,
     /// The folder of the write being made.
     current: Option<PathBuf>,
+    /// The batch running (jobs queued since the writer was last idle): how many are done of how many, and its row in
+    /// the activity stack while it runs.
+    batch_done: u64,
+    batch_total: u64,
+    row: Option<crate::activity::TaskHandle>,
     /// The thread has made every queued write and ended.
     exited: bool,
 }
@@ -54,11 +59,13 @@ fn lock(shared: &Shared) -> std::sync::MutexGuard<'_, State> {
 impl Writer {
     /// The writer thread, or `None` (and a log line) when it can't be started: the writes are then
     /// made as before, in the command.
-    pub fn start() -> Option<Writer> {
+    /// A batch of writes holds a row in `activity` while it runs (the stack shows it once it is 0.5 s old, so a quick
+    /// write after an edit doesn't flash one).
+    pub fn start(activity: crate::activity::Activity) -> Option<Writer> {
         let shared: Shared = Arc::new((Mutex::new(State::default()), Condvar::new()));
         let worker = shared.clone();
         let thread = move || {
-            run(&worker);
+            run(&worker, &activity);
             lock(&worker).exited = true;
             worker.1.notify_all();
         };
@@ -77,6 +84,10 @@ impl Writer {
         let id = job.id;
         if s.jobs.insert(id, job).is_none() {
             s.queue.push_back(id);
+            s.batch_total += 1;
+            if let Some(row) = &s.row {
+                row.progress(s.batch_done, s.batch_total);
+            }
         }
         self.shared.1.notify_all();
     }
@@ -151,7 +162,10 @@ impl Drop for Writer {
     }
 }
 
-fn run(shared: &Shared) {
+fn run(shared: &Shared, activity: &crate::activity::Activity) {
+    // the batch's row: no ✕, since a write left unmade would leave its sidecar behind the edit (a failed one waits for a
+    // retry anyway)
+    let mut row: Option<crate::activity::TaskGuard> = None;
     loop {
         let job = {
             let mut s = lock(shared);
@@ -160,6 +174,9 @@ fn run(shared: &Shared) {
                     if let Some(job) = s.jobs.remove(&id) {
                         s.busy += 1;
                         s.current = job.preferred.parent().map(PathBuf::from);
+                        let guard = row.get_or_insert_with(|| activity.start("sidecars", "Writing XMP sidecars", crate::activity::Cancel::No));
+                        guard.progress(s.batch_done, s.batch_total);
+                        s.row = Some(guard.handle());
                         break job;
                     }
                     continue;
@@ -176,6 +193,14 @@ fn run(shared: &Shared) {
         let mut s = lock(shared);
         s.busy = s.busy.saturating_sub(1);
         s.current = None;
+        s.batch_done += 1;
+        if s.queue.is_empty() && s.busy == 0 {
+            // the batch is over: its row goes
+            (s.batch_done, s.batch_total, s.row) = (0, 0, None);
+            row = None;
+        } else if let Some(r) = &row {
+            r.progress(s.batch_done, s.batch_total);
+        }
         s.done.push((job.id, job.original, result));
         shared.1.notify_all();
     }
@@ -188,6 +213,54 @@ mod tests {
     /// A write that never finishes (a network share that stopped answering; here a FIFO nobody writes to) doesn't
     /// hold up whoever drops the writer for longer than the shutdown limit; the queued write is still made once the
     /// share answers again.
+    /// A batch of writes holds one row in the activity stack ("Writing XMP sidecars", n of N, no ✕) for as long as it
+    /// runs, and the row goes when the queue is empty. The stack itself shows a row only once it is 0.5 s old, so the
+    /// quick write after an edit never flashes one; a slow share does.
+    #[cfg(unix)]
+    #[test]
+    fn a_write_batch_holds_one_activity_row_while_it_runs() {
+        let dir = std::env::temp_dir().join(format!("lc-sidecar-writer-activity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let activity = crate::activity::Activity::default();
+        let mut w = Writer::start(activity.clone()).unwrap();
+        let packet = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/>".to_string();
+        let mut sidecars = Vec::new();
+        for i in 0..3u64 {
+            let original = dir.join(format!("{i}.png"));
+            std::fs::write(&original, b"x").unwrap();
+            let sidecar = dir.join(format!("{i}.xmp"));
+            // the first write blocks on a FIFO until the test lets it go
+            if i == 0 && !std::process::Command::new("mkfifo").arg(&sidecar).status().is_ok_and(|s| s.success()) {
+                return;
+            }
+            w.submit(Job {
+                id: PhotoId(i),
+                original,
+                preferred: sidecar.clone(),
+                candidates: vec![sidecar.clone()],
+                packet: packet.clone(),
+                stamp: "s".into(),
+            });
+            sidecars.push(sidecar);
+        }
+        while lock(&w.shared).busy == 0 {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let rows = activity.list();
+        assert_eq!(rows.len(), 1, "one row for the batch: {rows:?}");
+        assert_eq!((rows[0].kind, rows[0].label.as_str(), rows[0].total, rows[0].cancellable), ("sidecars", "Writing XMP sidecars", 3, false));
+        drop(std::fs::OpenOptions::new().write(true).open(&sidecars[0]).unwrap());
+        assert!(w.wait_idle(Duration::from_secs(10)));
+        let until = Instant::now() + Duration::from_secs(5);
+        while !activity.list().is_empty() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(activity.list().is_empty(), "the row goes with the batch");
+        w.shutdown(Duration::from_secs(5));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[cfg(unix)]
     #[test]
     fn shutting_down_a_blocked_writer_waits_only_so_long() {
@@ -200,7 +273,7 @@ mod tests {
         if !std::process::Command::new("mkfifo").arg(&sidecar).status().is_ok_and(|s| s.success()) {
             return;
         }
-        let mut w = Writer::start().unwrap();
+        let mut w = Writer::start(crate::activity::Activity::default()).unwrap();
         let packet = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/>".to_string();
         w.submit(Job { id: PhotoId(1), original, preferred: sidecar.clone(), candidates: vec![sidecar.clone()], packet, stamp: "s".into() });
         // the write has started (and is stuck reading the FIFO)
