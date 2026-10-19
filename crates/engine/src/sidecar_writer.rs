@@ -23,9 +23,9 @@ pub(crate) struct Job {
     pub stamp: String,
 }
 
-/// A finished write: the sidecar's path and the bytes written (`None`: skipped, the photo's file is gone), or why it
-/// failed.
-pub(crate) type Done = (PhotoId, Result<Option<(PathBuf, Vec<u8>)>, String>);
+/// A finished write: the photo, the original it was queued for, and the sidecar's path and the bytes written (`None`:
+/// skipped, the original wasn't there), or why it failed.
+pub(crate) type Done = (PhotoId, PathBuf, Result<Option<(PathBuf, Vec<u8>)>, String>);
 
 #[derive(Default)]
 struct State {
@@ -166,7 +166,7 @@ fn run(shared: &Shared) {
             .unwrap_or_else(|_| Err(format!("{}: writing the sidecar failed", job.preferred.display())));
         let mut s = lock(shared);
         s.busy = s.busy.saturating_sub(1);
-        s.done.push((job.id, result));
+        s.done.push((job.id, job.original, result));
         shared.1.notify_all();
     }
 }

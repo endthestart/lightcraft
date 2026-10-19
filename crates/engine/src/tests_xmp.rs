@@ -1450,3 +1450,39 @@ fn opening_another_library_drains_background_writes_and_old_retries() {
     s.set_background_sidecar_writes(false);
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// A write queued while its original was there, whose original is gone by the time the writer gets to it (a share
+/// that dropped out), waits for a retry instead of being dropped: the edit is in the catalog, the sidecar isn't.
+#[cfg(unix)]
+#[test]
+fn a_queued_write_whose_original_went_away_waits_for_a_retry() {
+    let src = temp_dir("auto-background-gone");
+    write_png(&src.join("a.png"), 4);
+    write_png(&src.join("b.png"), 5);
+    let mut s = Session::new().with_fs();
+    s.execute("library.import", &json!({"paths": [src.to_string_lossy()]})).unwrap();
+    s.execute("library.xmpPreferences", &json!({"autoWrite": true})).unwrap();
+    s.set_background_sidecar_writes(true);
+    s.flush_sidecar_writes();
+    let id = |s: &Session, name: &str| s.catalog.photos().find(|p| p.file_name == name).unwrap().id.0;
+    let (a, b) = (id(&s, "a.png"), id(&s, "b.png"));
+    // a.png's sidecar is a FIFO: its write blocks the writer until something opens the other end
+    let fifo = src.join("a.xmp");
+    let _ = std::fs::remove_file(&fifo);
+    if !std::process::Command::new("mkfifo").arg(&fifo).status().is_ok_and(|st| st.success()) {
+        return;
+    }
+    s.execute("photo.rate", &json!({"ids": [a], "rating": 1})).unwrap();
+    s.execute("photo.rate", &json!({"ids": [b], "rating": 2})).unwrap();
+    // b's original goes away while its write waits in the queue
+    std::fs::rename(src.join("b.png"), src.join("away.png")).unwrap();
+    drop(std::fs::OpenOptions::new().write(true).open(&fifo).unwrap());
+    s.flush_sidecar_writes();
+    assert_eq!(s.unsaved_sidecars(), 1, "b's write waits for its original");
+    std::fs::rename(src.join("away.png"), src.join("b.png")).unwrap();
+    let r = s.execute("library.retrySidecars", &json!({})).unwrap();
+    assert_eq!(r, json!({"written": 1, "waiting": 0}));
+    assert!(std::fs::read_to_string(src.join("b.xmp")).unwrap().contains("<xmp:Rating>2</xmp:Rating>"));
+    s.set_background_sidecar_writes(false);
+    let _ = std::fs::remove_dir_all(&src);
+}

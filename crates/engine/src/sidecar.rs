@@ -658,13 +658,25 @@ impl Session {
     /// Where photo `id`'s sidecar goes: the preferred path and the spellings an existing packet may have (a shared stem
     /// owned by another photo left out). Catalog only; no file is looked at.
     fn sidecar_places(&self, id: PhotoId, owners: &StemOwners) -> Result<(PathBuf, Vec<PathBuf>)> {
+        let places = self.sidecar_paths(id, owners)?;
+        let p = self.catalog.photo(id).ok_or(lightcraft_catalog::CatalogError::NoPhoto(id))?;
+        let orig = file_path(p).unwrap_or_default();
+        if !Path::new(orig).is_file() {
+            return Err(EngineError::Other(format!("{}: the original {orig} is missing; no XMP sidecar is written", p.file_name)));
+        }
+        Ok(places)
+    }
+
+    /// [`Self::sidecar_places`] from the catalog alone, without looking at the disk: a background write checks the
+    /// original on its own thread, so an edit doesn't wait for a slow share.
+    fn sidecar_paths(&self, id: PhotoId, owners: &StemOwners) -> Result<(PathBuf, Vec<PathBuf>)> {
         let p = self.catalog.photo(id).ok_or(lightcraft_catalog::CatalogError::NoPhoto(id))?;
         if p.copy_of.is_some() {
             return Err(EngineError::Other(format!("{} is a virtual copy: its settings live only in the library", p.file_name)));
         }
         let orig = file_path(p).ok_or_else(|| EngineError::Other(format!("{} is not a file on disk", p.file_name)))?;
         // A relative path would be taken from the working directory.
-        if Path::new(orig).is_relative() || !Path::new(orig).is_file() {
+        if Path::new(orig).is_relative() {
             return Err(EngineError::Other(format!("{}: the original {orig} is missing; no XMP sidecar is written", p.file_name)));
         }
         let naming = owners.naming(p, self.xmp.naming);
@@ -766,7 +778,7 @@ impl Session {
                 let Some(p) = self.catalog.photo(id).filter(|p| file_path(p).is_some() && p.copy_of.is_none()) else { continue };
                 let original = PathBuf::from(file_path(p).unwrap_or_default());
                 let packet = sidecar_packet(p, &self.catalog);
-                match self.sidecar_places(id, &owners) {
+                match self.sidecar_paths(id, &owners) {
                     Ok((preferred, candidates)) => {
                         if let Some(w) = &self.sidecar_writer {
                             w.submit(crate::sidecar_writer::Job { id, original, preferred, candidates, packet, stamp: stamp.clone() });
@@ -836,14 +848,26 @@ impl Session {
         {
             let Some(w) = &self.sidecar_writer else { return 0 };
             let mut written = 0;
-            for (id, result) in w.take_done() {
+            for (id, original, result) in w.take_done() {
                 match result {
                     Ok(Some((path, bytes))) => {
                         self.note_sidecar_write(&path, &bytes);
                         self.unsaved_sidecars.remove(&id);
                         written += 1;
                     }
-                    Ok(None) => {}
+                    // the original wasn't there: when the photo is still at that path (a share that dropped out, not a
+                    // move or a removal made here) the write waits for a retry, as a write made in the command does
+                    Ok(None) => {
+                        let same = self
+                            .catalog
+                            .photo(id)
+                            .filter(|p| p.copy_of.is_none())
+                            .and_then(|p| file_path(p))
+                            .is_some_and(|f| Path::new(f) == original);
+                        if same {
+                            self.unsaved_sidecars.insert(id);
+                        }
+                    }
                     Err(e) => {
                         log::warn!("auto-write XMP: {e}");
                         self.unsaved_sidecars.insert(id);
