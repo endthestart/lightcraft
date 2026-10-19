@@ -1550,10 +1550,12 @@ fn opening_another_library_refuses_while_a_sidecar_write_is_stuck() {
         return;
     }
     let id = s.catalog.photos().next().unwrap().id;
+    let smart_dir = s.media.smart_dir.clone();
     s.execute("photo.rate", &json!({"ids": [id.0], "rating": 5})).unwrap();
     let e = s.open_library(base.join("two"), false).map(|_| ()).expect_err("refused while the write is stuck").to_string();
     assert!(e.contains("still running"), "{e}");
     assert!(s.catalog.photo(id).is_some(), "still the first library");
+    assert_eq!(s.media.smart_dir, smart_dir, "and still its smart previews");
     drop(std::fs::OpenOptions::new().write(true).open(&fifo).unwrap());
     s.set_sidecar_flush_limit(std::time::Duration::from_secs(10));
     s.open_library(base.join("two"), false).unwrap();

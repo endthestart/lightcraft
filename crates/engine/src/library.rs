@@ -450,6 +450,10 @@ impl Session {
 
     /// Open `stores`; the new library takes `lock` once nothing can fail any more.
     fn open_stores(&mut self, stores: LibraryStores, seed_demo: bool, lock: &mut Option<LibraryLock>) -> Result<()> {
+        // the old library's queued sidecar writes are made against its catalog; one still stuck (a share that stopped
+        // answering) keeps this library open, with its retries, rather than lose or misplace its result. First, before
+        // anything of the session changes.
+        self.settle_sidecar_writes()?;
         let LibraryStores { dir, catalog, mut files, on_disk } = stores;
         self.media.smart_dir = on_disk.then(|| crate::smart::dir(&dir));
         // the current library may be these same files: let its background snapshot land first
@@ -458,9 +462,6 @@ impl Session {
         {
             log::error!("library: {e}");
         }
-        // the old library's queued sidecar writes are made against its catalog; one still stuck (a share that stopped
-        // answering) keeps this library open, with its retries, rather than lose or misplace its result
-        self.settle_sidecar_writes()?;
         // Photo ids belong to one library; denoise work must not carry into the next.
         self.denoise.library_changed();
         self.media.denoise.clear();
