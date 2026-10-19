@@ -458,6 +458,8 @@ impl Session {
         {
             log::error!("library: {e}");
         }
+        // the old library's queued sidecar writes are made against its catalog
+        self.flush_sidecar_writes();
         // Photo ids belong to one library; denoise work must not carry into the next.
         self.denoise.library_changed();
         self.media.denoise.clear();
@@ -471,6 +473,8 @@ impl Session {
         // never edited this session would look unchanged and show the old library's numbers.
         static LOADS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         catalog.revision = LOADS.fetch_add(1, std::sync::atomic::Ordering::Relaxed).wrapping_add(1) << 32;
+        // (a sidecar waiting for a retry is a photo of the old library)
+        self.unsaved_sidecars.clear();
         self.catalog = catalog;
         // (nothing of the list the last library showed is this one's)
         self.refresh_view();

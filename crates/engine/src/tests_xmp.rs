@@ -1385,3 +1385,68 @@ fn a_failed_background_write_waits_for_a_retry() {
     s.set_background_sidecar_writes(false);
     let _ = std::fs::remove_dir_all(&src);
 }
+
+/// A background write whose original can't be reached when the edit is made (a share that dropped out) waits for a
+/// retry, as a failed write does: the sidecar mustn't stay behind the edit once the file is back.
+#[test]
+fn a_background_write_with_its_original_away_waits_for_a_retry() {
+    let src = temp_dir("auto-background-away");
+    write_png(&src.join("a.png"), 4);
+    let mut s = Session::new().with_fs();
+    s.execute("library.import", &json!({"paths": [src.to_string_lossy()]})).unwrap();
+    s.execute("library.xmpPreferences", &json!({"autoWrite": true})).unwrap();
+    s.set_background_sidecar_writes(true);
+    s.flush_sidecar_writes();
+    std::fs::rename(src.join("a.png"), src.join("away.png")).unwrap();
+    s.execute("photo.rate", &json!({"rating": 3})).unwrap();
+    s.flush_sidecar_writes();
+    assert_eq!(s.unsaved_sidecars(), 1, "the write waits for the original");
+    std::fs::rename(src.join("away.png"), src.join("a.png")).unwrap();
+    let r = s.execute("library.retrySidecars", &json!({})).unwrap();
+    assert_eq!(r, json!({"written": 1, "waiting": 0}));
+    assert!(std::fs::read_to_string(src.join("a.xmp")).unwrap().contains("<xmp:Rating>3</xmp:Rating>"));
+    s.set_background_sidecar_writes(false);
+    let _ = std::fs::remove_dir_all(&src);
+}
+
+/// Opening another library makes the old one's queued background writes first, and drops its waiting retries: photo
+/// ids are per library, so a failure from the old one must not mark a photo of the new one.
+#[cfg(unix)]
+#[test]
+fn opening_another_library_drains_background_writes_and_old_retries() {
+    use std::os::unix::fs::PermissionsExt;
+    let base = temp_dir("auto-background-switch");
+    let (photos, locked) = (base.join("photos"), base.join("locked"));
+    std::fs::create_dir_all(&photos).unwrap();
+    std::fs::create_dir_all(&locked).unwrap();
+    write_png(&photos.join("a.png"), 4);
+    write_png(&locked.join("b.png"), 5);
+    let mut s = Session::new().with_fs();
+    // both libraries write sidecars automatically (a library that doesn't drops its retries anyway)
+    s.open_library(base.join("two"), false).unwrap();
+    s.execute("library.xmpPreferences", &json!({"autoWrite": true})).unwrap();
+    s.open_library(base.join("one"), false).unwrap();
+    s.execute("library.import", &json!({"paths": [photos.to_string_lossy(), locked.to_string_lossy()]})).unwrap();
+    s.execute("library.xmpPreferences", &json!({"autoWrite": true})).unwrap();
+    s.set_background_sidecar_writes(true);
+    s.flush_sidecar_writes();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).unwrap();
+    if std::fs::write(locked.join(".probe"), b"x").is_ok() {
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+    let ids: Vec<u64> = s.catalog.photos().map(|p| p.id.0).collect();
+    s.execute("photo.rate", &json!({"ids": ids, "rating": 4})).unwrap();
+    // the writes are made but not yet taken in when the other library opens
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while s.sidecar_writes_pending() > 0 && std::time::Instant::now() < until {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    s.open_library(base.join("two"), false).unwrap();
+    s.flush_sidecar_writes();
+    assert!(std::fs::read_to_string(photos.join("a.xmp")).unwrap().contains("<xmp:Rating>4</xmp:Rating>"), "written before the switch");
+    assert_eq!(s.unsaved_sidecars(), 0, "the old library's retries don't carry over");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+    s.set_background_sidecar_writes(false);
+    let _ = std::fs::remove_dir_all(&base);
+}

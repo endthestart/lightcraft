@@ -772,7 +772,11 @@ impl Session {
                             w.submit(crate::sidecar_writer::Job { id, original, preferred, candidates, packet, stamp: stamp.clone() });
                         }
                     }
-                    Err(e) => log::warn!("auto-write XMP: {e}"),
+                    Err(e) => {
+                        // the original is away (a share that dropped out): retried once it is back, as a failed write is
+                        log::warn!("auto-write XMP: {e}");
+                        self.unsaved_sidecars.insert(id);
+                    }
                 }
             }
             return;
