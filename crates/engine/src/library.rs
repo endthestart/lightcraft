@@ -458,8 +458,9 @@ impl Session {
         {
             log::error!("library: {e}");
         }
-        // the old library's queued sidecar writes are made against its catalog
-        self.flush_sidecar_writes();
+        // the old library's queued sidecar writes are made against its catalog; one still stuck (a share that stopped
+        // answering) keeps this library open, with its retries, rather than lose or misplace its result
+        self.settle_sidecar_writes()?;
         // Photo ids belong to one library; denoise work must not carry into the next.
         self.denoise.library_changed();
         self.media.denoise.clear();

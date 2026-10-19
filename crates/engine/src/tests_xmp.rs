@@ -1526,3 +1526,38 @@ fn file_operations_refuse_while_a_sidecar_write_is_stuck() {
     s.set_background_sidecar_writes(false);
     let _ = std::fs::remove_dir_all(&src);
 }
+
+/// Opening another library while a background sidecar write of this one is stuck (a share that stopped answering;
+/// here a FIFO nobody writes to) refuses, as the file operations do: the write's result belongs to this library's
+/// photos, so switching would lose it or pin it on a photo of the next library. Once the write lands it opens.
+#[cfg(unix)]
+#[test]
+fn opening_another_library_refuses_while_a_sidecar_write_is_stuck() {
+    let base = temp_dir("auto-background-switch-stuck");
+    let photos = base.join("photos");
+    std::fs::create_dir_all(&photos).unwrap();
+    write_png(&photos.join("a.png"), 4);
+    let mut s = Session::new().with_fs();
+    s.open_library(base.join("one"), false).unwrap();
+    s.execute("library.import", &json!({"paths": [photos.to_string_lossy()]})).unwrap();
+    s.execute("library.xmpPreferences", &json!({"autoWrite": true})).unwrap();
+    s.set_background_sidecar_writes(true);
+    s.flush_sidecar_writes();
+    s.set_sidecar_flush_limit(std::time::Duration::from_millis(100));
+    let fifo = photos.join("a.xmp");
+    let _ = std::fs::remove_file(&fifo);
+    if !std::process::Command::new("mkfifo").arg(&fifo).status().is_ok_and(|st| st.success()) {
+        return;
+    }
+    let id = s.catalog.photos().next().unwrap().id;
+    s.execute("photo.rate", &json!({"ids": [id.0], "rating": 5})).unwrap();
+    let e = s.open_library(base.join("two"), false).map(|_| ()).expect_err("refused while the write is stuck").to_string();
+    assert!(e.contains("still running"), "{e}");
+    assert!(s.catalog.photo(id).is_some(), "still the first library");
+    drop(std::fs::OpenOptions::new().write(true).open(&fifo).unwrap());
+    s.set_sidecar_flush_limit(std::time::Duration::from_secs(10));
+    s.open_library(base.join("two"), false).unwrap();
+    assert!(std::fs::read_to_string(photos.join("a.xmp")).unwrap().contains("<xmp:Rating>5</xmp:Rating>"));
+    s.set_background_sidecar_writes(false);
+    let _ = std::fs::remove_dir_all(&base);
+}
