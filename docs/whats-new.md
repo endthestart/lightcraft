@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-20
+
+### Adding a curve point doesn't move the curve
+- Clicking the Tone Curve graph to add a point now puts it on the curve at the clicked spot's input value, as in
+  Lightroom Classic, so the photo doesn't change until you drag the point (LightCraft Classic issue #340). The point
+  used to land at the pointer's height, so a click a pixel off the line already bent the curve.
+
 ## 2026-10-14
 
 ### Model downloads time out on a name that doesn't resolve
