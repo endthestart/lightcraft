@@ -641,18 +641,18 @@ fn cell(app: &mut LightcraftApp, ui: &mut egui::Ui, id: PhotoId, r: Rect, square
         let fit = super::detail::fit_texture_rect(img_rect, [tw, th]);
         p.image(tex.tex.id(), fit, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
         if active {
-            p.rect_stroke(fit.expand(if square { 2.0 } else { 0.0 }), 0.0, Stroke::new(2.0, Color32::WHITE), StrokeKind::Outside);
+            p.rect_stroke(fit.expand(if square { 2.0 } else { 0.0 }), 0.0, Stroke::new(2.0, t.cell_active_border), StrokeKind::Outside);
         } else if selected {
-            p.rect_stroke(fit, 0.0, Stroke::new(2.0, Color32::from_gray(170)), StrokeKind::Outside);
+            p.rect_stroke(fit, 0.0, Stroke::new(2.0, t.cell_selected_border), StrokeKind::Outside);
         }
     } else {
         let ph = img_rect.shrink(if square { 20.0 } else { 0.0 });
         p.rect_filled(ph, 0.0, Color32::from_gray(38));
         // not drawn yet (or unreadable): the selection is still visible
         if active {
-            p.rect_stroke(ph, 0.0, Stroke::new(2.0, Color32::WHITE), StrokeKind::Outside);
+            p.rect_stroke(ph, 0.0, Stroke::new(2.0, t.cell_active_border), StrokeKind::Outside);
         } else if selected {
-            p.rect_stroke(ph, 0.0, Stroke::new(2.0, Color32::from_gray(170)), StrokeKind::Outside);
+            p.rect_stroke(ph, 0.0, Stroke::new(2.0, t.cell_selected_border), StrokeKind::Outside);
         }
         if app.renderer.failure(Slot::Thumb(id)).is_some() {
             // unreadable / missing file

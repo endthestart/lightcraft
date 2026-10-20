@@ -1,5 +1,11 @@
 # What's new in LightCraft
 
+## 2026-10-19
+
+### Selected photos are outlined in the light themes
+- The grid's border around the active and the other selected photos is dark in the Silver and Paper themes. It was
+  white and light grey in every theme, so the selection was hard to see on the light themes' pale cells (issue #2382).
+
 ## 2026-10-14
 
 ### Model downloads time out on a name that doesn't resolve
