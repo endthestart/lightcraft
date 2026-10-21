@@ -1,5 +1,11 @@
 # What's new in LightCraft
 
+## 2026-10-21
+
+### Planar TIFFs open
+- TIFFs that store each colour in its own plane (PlanarConfiguration 2) now show their thumbnail, preview and photo
+  (issue #2462). Only the first plane was read, so they failed with "sample buffer too short".
+
 ## 2026-10-14
 
 ### Model downloads time out on a name that doesn't resolve
