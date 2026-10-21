@@ -49,7 +49,9 @@ pub fn shift_iso(iso: &str, secs: i64) -> Option<String> {
     if !(first..=last).contains(&t) {
         return None;
     }
-    let tail = iso.trim().get(19..).unwrap_or("");
+    let iso = iso.trim();
+    // the seconds are optional (`10:00+02:00`): without them the tail starts right after the minutes
+    let tail = iso.get(if iso.get(16..17) == Some(":") { 19 } else { 16 }..).unwrap_or("");
     Some(format!("{}{tail}", civil(t)))
 }
 
@@ -220,6 +222,24 @@ mod tests {
         assert_eq!(shift_iso("9999-12-31T23:59:58", 1).as_deref(), Some("9999-12-31T23:59:59"));
         assert_eq!(normalize_iso("2026-04-01 10:05").as_deref(), Some("2026-04-01T10:05:00"));
         assert_eq!(normalize_iso("2026-02-30"), None);
+    }
+
+    #[test]
+    fn shift_keeps_the_zone_of_a_time_without_seconds() {
+        assert_eq!(shift_iso("2026-01-01T10:00+02:00", 3600).as_deref(), Some("2026-01-01T11:00:00+02:00"));
+        assert_eq!(shift_iso("2026-01-01T10:00Z", 60).as_deref(), Some("2026-01-01T10:01:00Z"));
+        assert_eq!(shift_iso("2026-01-01T10:00", 3600).as_deref(), Some("2026-01-01T11:00:00"));
+        assert_eq!(shift_iso("2026-01-01T10:00:00.5-05:00", 3600).as_deref(), Some("2026-01-01T11:00:00.5-05:00"));
+        assert_eq!(iso_seconds("2026-01-01T10:00+02:00"), iso_seconds("2026-01-01T10:00"));
+    }
+
+    #[test]
+    fn impossible_times_are_rejected_not_rolled_over() {
+        for bad in ["2026-04-01T10:75:00", "2026-04-01 10:00:75", "2026-04-01T10:60", "2026-04-01T24:00:00", "2026-04-01T10:59:60"] {
+            assert_eq!(normalize_iso(bad), None, "{bad}");
+            assert_eq!(shift_iso(bad, 5), None, "{bad}");
+        }
+        assert_eq!(normalize_iso("2026-04-01T23:59:59").as_deref(), Some("2026-04-01T23:59:59"));
     }
 
     #[test]
