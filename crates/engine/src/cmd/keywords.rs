@@ -446,7 +446,9 @@ pub fn specs() -> Vec<CommandSpec> {
                 match str_param(p, "path").map(str::trim).filter(|x| !x.is_empty()) {
                     Some(path) => {
                         s.check_write_target(path).map_err(|e| bad("keyword.export", e))?;
-                        crate::export::write_file_durable(path, file.text.as_bytes()).map_err(crate::EngineError::Other)?;
+                        // atomic, and into an existing folder only: a missing one is an error, as before
+                        lightcraft_catalog::safe_file::write_atomic(std::path::Path::new(path), file.text.as_bytes())
+                            .map_err(|e| crate::EngineError::Other(format!("{path}: {e}")))?;
                         r["path"] = json!(path);
                     }
                     None => r["text"] = json!(file.text),
