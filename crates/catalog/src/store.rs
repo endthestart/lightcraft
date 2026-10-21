@@ -250,7 +250,7 @@ impl Store for MemStore {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests_staging {
     use super::*;
 

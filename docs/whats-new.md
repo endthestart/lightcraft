@@ -1,5 +1,29 @@
 # What's new in LightCraft
 
+## 2026-10-19
+
+### Hidden Local locations come back one at a time
+- With several locations removed from Local, "Show N hidden locations" now lists them, so each comes back on its own
+  (Restore All is there too). The row used to bring every hidden location back at once (issue #2114).
+
+## 2026-10-18
+
+### Fill Location from GPS: no more neighbouring town in City
+- The offline place names list towns of 15,000 people or more, so a photo taken in a smaller one got the nearest larger
+  town in City, sometimes another municipality (issue #2242). The Fill Location tooltip and the command help now say so,
+  and `metadata.reverseGeocode` takes `maxDistance` (metres): past it, City stays empty (State and Country still fill)
+  and the reply names the town it found as `nearestCity`.
+
+### A preset that couldn't be saved is no longer lost silently
+- When presets.json can't be written (a full disk, or the browser's storage quota), the new or changed preset now
+  counts as unsaved, like other changes: the top bar warns, saving is retried, and quitting asks first (issue #2266).
+  Before, the failure was only logged, and the preset could be lost without any warning.
+
+### Portrait crop ratios stay portrait
+- A crop ratio no longer flips to the photo's orientation (issue #2253): after X turns the crop portrait, picking
+  another ratio (4 × 5, 2 × 3…) keeps it portrait, as in Lightroom, and a Custom ratio taller than wide gives a
+  portrait crop.
+
 ## 2026-10-15
 
 ### XMP sidecars and imports on an SMB share (macOS)
@@ -7,7 +31,31 @@
   imported nothing ("Operation not supported"). These writes now fall back to a plain flush there, as the library's own
   files do (issue #1407). Moving photos to a share, sidecar backups and slideshow exports get the same fix.
 
+### Constrain Crop tightens the crop you see
+- Geometry ▸ Constrain Crop now changes the crop itself, as in Lightroom (issue #1927). Ticking it, or moving a
+  Geometry slider, Upright or a lens correction while it is ticked, shrinks the crop about its centre until the blank
+  corners left by the correction are gone, and the Crop tool shows the tighter crop. Before, it only applied when the
+  photo was shown outside the Crop tool, so in the Crop panel, where the checkbox is, nothing seemed to change. A crop
+  you draw by hand is kept as drawn, and unticking keeps the tighter crop.
+
+### Web: no backup that misses unsaved changes
+- In the browser version, File ▸ Back Up Library… no longer reports success while a save is failing (storage full or
+  cleared): the backup copies the stored library, so it left out the changes that couldn't be saved (issue #1508). It
+  now refuses to start and says how many changes are unsaved and why. LightCraft retries the save with every change;
+  back up once nothing is left unsaved.
+
+### Web: an unreadable library is not opened
+- In the browser version, a library file that exists but can't be read at start-up is no longer taken for a missing
+  one (issue #1507). LightCraft used to open the library without it, showing an incomplete catalog that the next save
+  would write over the stored copy. It now leaves the library unopened, saves nothing and says which file couldn't be
+  read; reload the page to try again.
+
 ## 2026-10-14
+
+### Model downloads time out on a name that doesn't resolve
+- Model downloads (AI denoise, faces, SAM) give up on a server name that doesn't resolve within the connect timeout,
+  and Cancel stops a download that is still looking the name up (issue #1532). The lookup used to block with no time
+  limit, and each of a server's addresses then got the whole connect timeout of its own.
 
 ### Lightroom radial masks on the right side
 - Radial masks brought over from Lightroom Classic (catalog import, XMP sidecars, edits inside DNGs and presets) now
