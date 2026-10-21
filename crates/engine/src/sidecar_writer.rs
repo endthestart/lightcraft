@@ -285,10 +285,12 @@ mod tests {
         assert!(start.elapsed() < Duration::from_secs(5), "returned after {:?}", start.elapsed());
         // the share answers: the write goes on and lands
         drop(std::fs::OpenOptions::new().write(true).open(&sidecar).unwrap());
-        let until = Instant::now() + Duration::from_secs(10);
+        let until = Instant::now() + Duration::from_secs(30);
         while std::fs::symlink_metadata(&sidecar).is_ok_and(|m| !m.is_file()) && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }
+        // (still the FIFO, reading it would wait for a writer forever: a slow machine fails here instead)
+        assert!(std::fs::symlink_metadata(&sidecar).is_ok_and(|m| m.is_file()), "the queued write replaced the FIFO");
         assert!(std::fs::read_to_string(&sidecar).is_ok_and(|s| s.contains("xmpmeta")), "the queued write was made");
         let _ = std::fs::remove_dir_all(&dir);
     }
