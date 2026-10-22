@@ -306,9 +306,9 @@ fn create_dir_durable(dir: &Path) -> io::Result<()> {
     }
     fs::create_dir_all(dir)?;
     for d in &missing {
-        if let Some(parent) = d.parent().filter(|p| !p.as_os_str().is_empty()) {
-            sync_dir(parent)?;
-        }
+        // (a relative top folder's parent is the current one)
+        let parent = d.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        sync_dir(parent)?;
     }
     Ok(())
 }
