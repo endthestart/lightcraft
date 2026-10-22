@@ -307,6 +307,15 @@ fn the_original_stays_when_the_copys_folder_cannot_be_synced() {
     assert_eq!(len(&r, "moved"), 0, "{r}");
     assert!(r["kept"][0]["reason"].as_str().unwrap().contains("durable"), "{r}");
     assert!(card.join("a.png").is_file() && dest.join("a.png").is_file());
+    // new folders whose entries can't be synced are taken away again: nothing is left at the destination
+    let fresh = base.join("out3");
+    write_png(&card.join("c.png"), 3);
+    inject(Fault::FailDirSync);
+    let _ = import_move(&mut s, &[&card.join("c.png")], &fresh, json!({"organize": "day"}));
+    inject(Fault::None);
+    assert!(!fresh.exists(), "the folders made for the failed move are gone");
+    assert!(card.join("c.png").is_file());
+    std::fs::remove_file(card.join("c.png")).unwrap();
     // and with the sync working, nested new folders are made and the original moves
     write_png(&card.join("b.png"), 2);
     let deep = base.join("out2");

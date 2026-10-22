@@ -308,7 +308,13 @@ fn create_dir_durable(dir: &Path) -> io::Result<()> {
     for d in &missing {
         // (a relative top folder's parent is the current one)
         let parent = d.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
-        sync_dir(parent)?;
+        if let Err(e) = sync_dir(parent) {
+            // nothing is left at the destination on failure: the folders made here go again, deepest first
+            for d in &missing {
+                let _ = fs::remove_dir(d);
+            }
+            return Err(e);
+        }
     }
     Ok(())
 }
