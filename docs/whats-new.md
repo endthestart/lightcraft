@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-23
+
+### Olympus ORF files cut short
+- An uncompressed 12-bit ORF whose raw strip runs past the end of the file is now refused as corrupt (issue #2561).
+  Before, it opened with most of each row left black, and a probe at import could allocate up to 2 GiB for a file of
+  a few kilobytes.
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
