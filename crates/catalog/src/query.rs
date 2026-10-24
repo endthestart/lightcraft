@@ -82,6 +82,7 @@ impl Filter {
         "flag",
         "label",
         "only",
+        "onlyNone",
         "labels",
         "kind",
         "edited",
