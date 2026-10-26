@@ -826,11 +826,14 @@ pub fn show(app: &mut LightcraftApp, ui: &mut egui::Ui) {
     } else if show_before {
         shown = draw(Slot::Before, img_rect, canvas);
         if shown == "none" {
-            let say = app
-                .renderer
-                .failure_of(Slot::Before, id)
-                .map_or_else(|| crate::i18n::tr("Rendering…"), |_| crate::i18n::tr("This photo can't be opened"));
-            p.text(canvas.center(), Align2::CENTER_CENTER, say, t.font(13.0), t.text_dim);
+            // "Rendering…" only with View Options' Show message when loading or rendering photos
+            let say = match app.renderer.failure_of(Slot::Before, id) {
+                Some(_) => Some(crate::i18n::tr("This photo can't be opened")),
+                None => app.ui.settings.loupe_messages.then(|| crate::i18n::tr("Rendering…")),
+            };
+            if let Some(say) = say {
+                p.text(canvas.center(), Align2::CENTER_CENTER, say, t.font(13.0), t.text_dim);
+            }
         }
         // on the photo itself, so it gets the hover label's dark pill to stay readable over light
         // pictures; painted after the window renders below, which would cover it zoomed in

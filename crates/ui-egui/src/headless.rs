@@ -5403,6 +5403,12 @@ mod tests {
         }
         assert!(h.app.renderer.is_pending(Slot::Before), "the Before render is held");
         assert_eq!(h.app.loupe_shown.map(|l| (l.0.0, l.1)), Some((other, "none")), "no edited stand-in under the Before label");
+        let says = |h: &Headless| h.painted_text().iter().any(|text| text == "Rendering…");
+        assert!(says(&h), "the empty Before side says it is rendering");
+        // View Options' Show message when loading or rendering photos covers it too
+        h.app.ui.settings.loupe_messages = false;
+        h.step();
+        assert!(!says(&h), "no message while it is off");
         open.set(true);
         assert!(h.step_until(SETTLE, |h| h.app.loupe_shown.is_some_and(|l| l.1 == "render")), "the Before render lands");
     }
