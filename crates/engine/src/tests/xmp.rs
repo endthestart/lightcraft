@@ -1831,8 +1831,15 @@ fn file_operations_refuse_while_a_sidecar_write_is_stuck() {
         assert!(e.contains("still running") && e.contains(&src.to_string_lossy().to_string()), "{command}: {e}");
     }
     assert!(src.join("a.png").exists(), "nothing was renamed");
-    // the share answers: the write lands and the rename goes ahead
-    drop(std::fs::OpenOptions::new().write(true).open(&fifo).unwrap());
+    // the share answers: the write lands and the rename goes ahead. Every reader waiting on the FIFO gets its end of
+    // file until the write has replaced it, as another reader (not the write) can be the one an open pairs with.
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::fs::symlink_metadata(&fifo).is_ok_and(|m| std::os::unix::fs::FileTypeExt::is_fifo(&m.file_type())) && std::time::Instant::now() < until
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        drop(std::fs::OpenOptions::new().write(true).custom_flags(libc::O_NONBLOCK).open(&fifo));
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     s.set_sidecar_flush_limit(std::time::Duration::from_secs(10));
     s.execute("photo.rename", &json!({"ids": [id], "template": "renamed"})).unwrap();
     assert!(std::fs::read_to_string(src.join("renamed.xmp")).unwrap().contains("<xmp:Rating>3</xmp:Rating>"));
